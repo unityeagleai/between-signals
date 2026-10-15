@@ -63,7 +63,8 @@ const U = BS.U = {
   uAmb: { value: 1 }, uFogD: { value: 0.06 }, uFogC: { value: new THREE.Color(0.03, 0.05, 0.055) },
   uBlob: { value: [new THREE.Vector4(0, 0, 0, 0), new THREE.Vector4(0, 0, 0, 0), new THREE.Vector4(0, 0, 0, 0)] },
   uLineHead: { value: new THREE.Vector4(0, -50, 0, 0) }, uDoorW: { value: 0.2 }, uImg: { value: null },
-  uFeat: { value: null }, uFeatN: { value: 1 }, uFeatRows: { value: 1 }, uPlayer: { value: new THREE.Vector3() }, uWalk: { value: 0 }
+  uFeat: { value: null }, uFeatN: { value: 1 }, uFeatRows: { value: 1 }, uPlayer: { value: new THREE.Vector3() }, uWalk: { value: 0 },
+  uSig: { value: 0 }   // live only: the living room (gold music symbols on dark teal). Always 0 in render mode, so the video is unchanged
 };
 const GL = `
 float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -77,6 +78,8 @@ const vec3 WARM2 = vec3(1.0, 0.74, 0.46);
 const vec3 BRONZE = vec3(0.86, 0.60, 0.30);
 const vec3 VERD = vec3(0.26, 0.62, 0.52);
 const vec3 TEAL = vec3(0.05, 0.22, 0.24);
+const vec3 GOLDG = vec3(1.0, 0.74, 0.32);
+const vec3 DTEAL = vec3(0.010, 0.085, 0.090);
 // light falling on a surface: her blooms (warm), the doorway's glow, the head of his line (bronze), a little cold ambient
 vec3 lightAt(vec3 wp, vec3 n){
   vec3 c = vec3(0.004, 0.009, 0.010) * uAmb;
@@ -89,7 +92,7 @@ vec3 lightAt(vec3 wp, vec3 n){
 }
 float fogF(float dist){ return 1.0 - exp(-uFogD*uFogD*dist*dist); }
 `;
-const VH = `uniform float uT, uTime, uRms, uSub, uHi, uHer, uHis, uTrip, uReveal, uDark, uSplit, uPatina, uDoorGlow, uAmb, uFogD, uDoorW, uFeatN, uFeatRows, uWalk;
+const VH = `uniform float uT, uTime, uRms, uSub, uHi, uHer, uHis, uTrip, uReveal, uDark, uSplit, uPatina, uDoorGlow, uAmb, uFogD, uDoorW, uFeatN, uFeatRows, uWalk, uSig;
 uniform vec3 uFogC, uPlayer; uniform vec4 uBlob[3]; uniform vec4 uLineHead; uniform sampler2D uImg; uniform sampler2D uFeat;
 varying vec3 vWp; varying vec3 vN; varying vec2 vUv; varying float vDist;
 `;
@@ -121,15 +124,87 @@ BS.mat = mat;
 // The psychedelic guitar break: the stone breathes along its normals, slow, never a flash
 const BREATHE = `
   float br = sin(wp.y*1.1 + uTime*1.6 + wp.z*0.55) * 0.5 + sin(wp.z*0.8 - uTime*1.1 + wp.x*0.4) * 0.5;
-  wp.xyz += vN * br * uTrip * (0.18 + 0.32*uSub);`;
+  wp.xyz += vN * br * uTrip * (0.18 + 0.32*uSub);
+  wp.xyz += vN * sin(wp.y*0.7 + wp.z*0.35 - uTime*0.55) * uSig * (0.02 + 0.06*uRms);`;
+const SYMS = `
+// ---- live mode: the living room. Gold glowing music symbols drift, pulse and morph across dark-teal stone (after the Ancient Signal room)
+vec2 rot2(vec2 p, float a){ float c = cos(a), s = sin(a); return vec2(c*p.x - s*p.y, s*p.x + c*p.y); }
+float sgS(vec2 p, vec2 a, vec2 b){ vec2 pa = p-a, ba = b-a; float h = clamp(dot(pa,ba)/dot(ba,ba), 0.0, 1.0); return length(pa - ba*h); }
+float sHead(vec2 p){ vec2 q = rot2(p, 0.45) / vec2(0.085, 0.062); return (length(q) - 1.0) * 0.062; }
+float sArc(vec2 p, vec2 c, float r){ return abs(length(p - c) - r); }
+float sym(vec2 p, float k){
+  float w = 0.014, d = 9.0;
+  if (k < 0.5) {            // quarter note
+    d = min(sHead(p - vec2(-0.05, -0.2)), sgS(p, vec2(0.022, -0.17), vec2(0.022, 0.26)) - w);
+  } else if (k < 1.5) {     // eighth note with a flag
+    d = min(sHead(p - vec2(-0.05, -0.2)), sgS(p, vec2(0.022, -0.17), vec2(0.022, 0.27)) - w);
+    vec2 c = vec2(0.022, 0.12); float f = sArc(p, c, 0.15) - w * 1.2; f = max(f, c.x - p.x); f = max(f, (c.y - 0.05) - p.y);
+    d = min(d, f);
+  } else if (k < 2.5) {     // two beamed eighths
+    d = min(sHead(p - vec2(-0.2, -0.2)), sHead(p - vec2(0.1, -0.14)));
+    d = min(d, sgS(p, vec2(-0.128, -0.17), vec2(-0.128, 0.22)) - w); d = min(d, sgS(p, vec2(0.172, -0.11), vec2(0.172, 0.28)) - w);
+    d = min(d, sgS(p, vec2(-0.128, 0.22), vec2(0.172, 0.28)) - 0.032);
+  } else if (k < 3.5) {     // treble clef
+    d = sArc(p, vec2(0.0, -0.1), 0.11) - w;
+    d = min(d, sgS(p, vec2(-0.01, -0.36), vec2(0.04, 0.33)) - w);
+    float tl = sArc(p, vec2(-0.015, 0.25), 0.075) - w; tl = max(tl, -(p.y - 0.2)); d = min(d, tl);
+    d = min(d, length(p - vec2(-0.06, -0.35)) - 0.035);
+  } else if (k < 4.5) {     // bass clef
+    float a = sArc(p, vec2(-0.04, 0.06), 0.14) - w * 1.3; a = max(a, -(p.y - 0.02) - max(p.x - 0.05, 0.0) * 3.0); d = a;
+    d = min(d, sgS(p, vec2(0.095, -0.0), vec2(-0.12, -0.26)) - w * 1.3);
+    d = min(d, length(p - vec2(-0.15, 0.06)) - 0.04);
+    d = min(d, length(p - vec2(0.2, 0.12)) - 0.026); d = min(d, length(p - vec2(0.2, -0.02)) - 0.026);
+  } else if (k < 5.5) {     // sharp
+    d = min(sgS(p, vec2(-0.05, -0.26), vec2(-0.05, 0.24)), sgS(p, vec2(0.05, -0.24), vec2(0.05, 0.26))) - w;
+    d = min(d, sgS(p, vec2(-0.14, 0.04), vec2(0.14, 0.11)) - 0.026); d = min(d, sgS(p, vec2(-0.14, -0.11), vec2(0.14, -0.04)) - 0.026);
+  } else if (k < 6.5) {     // flat
+    d = sgS(p, vec2(-0.06, -0.16), vec2(-0.06, 0.32)) - w;
+    float b = sArc(p, vec2(-0.0, -0.07), 0.085) - w * 1.3; b = max(b, -0.06 - p.x); d = min(d, b);
+  } else {                  // half note
+    d = min(abs(sHead(p - vec2(-0.05, -0.2))) - w * 0.8, sgS(p, vec2(0.022, -0.17), vec2(0.022, 0.26)) - w);
+  }
+  return d;
+}
+// the symbol layer at wall point q (metres in the wall's plane); returns the glow
+float symLayer(vec2 q, float dir){
+  vec2 g = q + vec2(dir * uTime * 0.13, 0.18 * sin(q.x * 0.21 + uTime * 0.27));
+  g /= 1.05; vec2 cell = floor(g); vec2 p = fract(g) - 0.5;
+  float cellOn = h21(cell + 41.0);
+  float on = smoothstep(0.42, 0.56, cellOn + 0.22 * sin(uTime * 0.19 + cell.x * 0.73 + cell.y * 1.31));
+  float glow = 0.0;
+  if (on > 0.001) {
+    p = rot2(p, 0.25 * sin(uTime * 0.35 + cellOn * 9.0)) * (1.25 - 0.25 * on);
+    float ph = uTime * 0.11 + cellOn * 9.0, i0 = floor(ph), f = smoothstep(0.72, 1.0, fract(ph));
+    float k0 = floor(h21(cell + i0 * 1.37) * 8.0), k1 = floor(h21(cell + (i0 + 1.0) * 1.37) * 8.0);
+    if (dot(p, p) < 0.25) {                                            // only near the symbol itself
+      float d = sym(p, k0);
+      if (f > 0.0) d = mix(d, sym(p, k1), f);                          // one shape melts into the next
+      float gate = 0.55 + 0.45 * sin(uTime * 1.3 + cellOn * 20.0);
+      glow = (smoothstep(0.016, 0.0, d) + 0.4 * exp(-max(d, 0.0) * 24.0)) * gate * on;
+    }
+  }
+  // staff lines: two five-line staves per wall, waving and drifting
+  for (int s = 0; s < 2; s++) {
+    float y0 = s == 0 ? 1.55 : 6.05;
+    float v = q.y - y0 - 0.22 * sin(q.x * 0.33 + uTime * 0.42 + float(s) * 2.0) - 0.08 * sin(q.x * 1.1 - uTime * 0.7);
+    if (abs(v) < 0.3) {
+      float l = abs(fract(v / 0.12 + 0.5) - 0.5) * 0.12;
+      float fade = 0.5 + 0.5 * sin(q.x * 0.17 - uTime * 0.31 + float(s) * 3.0);
+      glow += smoothstep(0.009, 0.0, l) * 0.55 * fade + exp(-l * 60.0) * 0.12 * fade;
+    }
+  }
+  return glow;
+}
+`;
 // stone: ashlar blocks, mineral streaks; verdigris where water and time got in; her image when the room turns out to be her light
-const STONE = `
+const STONE = SYMS + `
 uniform float uKind; // 0 wall, 1 ceiling, 2 pillar
 vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
   vec2 q = abs(n.x) > 0.5 ? wp.zy : (abs(n.z) > 0.5 ? wp.xy : wp.xz);
   if (uKind > 1.5) q = vec2(atan(wp.x - floor(wp.x/8.4+0.5)*8.4, 1.0)*0.0 + uv.x*3.2, wp.y);
   vec2 w = q;
   if (uTrip > 0.001) { float a = uTime*0.25; w += uTrip * 0.9 * vec2(fbm3(q*0.35 + a), fbm3(q*0.35 - a + 3.1)); }
+  if (uSig > 0.001) w += uSig * vec2(0.10 * sin(q.y * 1.3 + uTime * 0.45), 0.22 * (noise(q * 0.4 + vec2(0.0, uTime * 0.05)) - 0.5));  // the stone slowly melts
   vec2 bq = vec2(w.x * 0.62, w.y * 1.15); float row = floor(bq.y); bq.x += mod(row, 2.0) * 0.5;
   vec2 cell = fract(bq), id = floor(bq);
   float mortar = smoothstep(0.0, 0.035, min(min(cell.x, 1.0-cell.x)*0.6, min(cell.y, 1.0-cell.y)));
@@ -153,6 +228,19 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
       float mid = smoothstep(0.012, 0.0, abs(v - sin(wp.z*3.0 - uT*2.0) * f.y * 0.25));
       vec3 fc = mix(BRONZE, VERD*1.3, smoothstep(0.0, 0.6, abs(v)/max(e,0.05)));
       col += fc * (fill * 0.32 + mid * 0.5) * (0.25 + 1.1*uRms + 0.6*uHer) * (1.0 - uDark*0.8) * step(0.0, uT);
+    }
+  }
+  if (uSig > 0.001) {
+    // deep teal drifting through the stone, and the gold symbols on top
+    float neb = smoothstep(0.25, 0.85, noise(q * 0.22 + vec2(uTime * 0.021, -uTime * 0.016)));
+    float e = 0.3 + 1.2 * uRms + 0.45 * uSub;
+    col = mix(col, col * vec3(0.55, 1.05, 1.12), uSig * 0.6);
+    col += DTEAL * (0.2 + 0.6 * neb) * uSig * (0.55 + 0.6 * uRms);
+    if (uKind < 1.5) {
+      float fr = (uKind < 0.5 && abs(n.x) > 0.5 && abs(wp.y - 4.35) < 0.8) ? 0.35 : 1.0;   // quieter over the soundwave frieze
+      float gl = symLayer(q, abs(n.x) > 0.5 ? -sign(n.x) : 1.0) * fr * (uKind > 0.5 ? 0.6 : 1.0);
+      float gg = gl * uSig * e * (1.0 - uDark * 0.5);
+      col = col * (1.0 - 0.7 * clamp(gg, 0.0, 1.0)) + GOLDG * gg * 0.6;
     }
   }
   if (uReveal > 0.001) {
@@ -222,6 +310,10 @@ vec3 shade(vec3 wp, vec3 n0, vec2 uv, inout float alpha){
   col += lightAt(wp, n) * 0.05;
   if (uReveal > 0.001) col += texture2D(uImg, vec2(fract(R.x*0.3 + 0.5), clamp(R.y*0.8, 0.0, 1.0))).rgb * uReveal * fr * 0.9;
   col *= (1.0 + hh * 0.6);
+  if (uSig > 0.001) {
+    float rg = abs(fract(length(wp.xz - vec2(0.0, -7.0)) * 0.45 - uTime * 0.06) - 0.5);
+    col += GOLDG * (smoothstep(0.035, 0.0, rg) * 0.10 + DTEAL.g * 0.3) * uSig * (0.35 + uRms);
+  }
   return col;
 }`;
 
@@ -396,9 +488,114 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
   alpha = max(m, rim * 0.8) * uVis;
   return mix(vec3(0.006, 0.008, 0.008), WARM * (0.6 + 0.8*uHer), rim * (1.0 - m*0.6));
 }`;
+
+// Live mode (v2, Oct 15): human silhouettes instead of stick figures. Head, neck, shoulders, a torso that narrows at the waist,
+// hips, and arms and legs with real volume (tapered capsules melted together with a smooth union); legs by two-bone IK so the feet
+// stay planted while the knees bend on the beat. Partly see-through: dark-teal smoke inside, a gold glow at the edge.
+// Still one quad per dancer (2 triangles), drawn in the shader.
+const DANCER2 = `
+uniform float uSeed, uMode, uVis, uAspX;
+float smin(float a, float b, float k){ float h = clamp(0.5 + 0.5*(b - a)/k, 0.0, 1.0); return mix(b, a, h) - k*h*(1.0 - h); }
+float rc(vec2 p, vec2 a, vec2 b, float ra, float rb){ vec2 pa = p - a, ba = b - a; float h = clamp(dot(pa, ba)/dot(ba, ba), 0.0, 1.0); return length(pa - ba*h) - mix(ra, rb, h); }
+float el(vec2 p, vec2 c, vec2 r){ return (length((p - c)/r) - 1.0) * min(r.x, r.y); }
+vec2 dr(float a){ return vec2(sin(a), -cos(a)); }
+// two-bone IK in the picture plane: from joint a toward target c; returns the middle joint, writes the end joint to e
+vec2 ik(vec2 a, vec2 c, float l1, float l2, float bend, out vec2 e){
+  vec2 d = c - a; float L0 = max(length(d), 1e-3); vec2 u = d / L0; float L = clamp(L0, 0.05, l1 + l2 - 0.002);
+  float x = (l1*l1 - l2*l2 + L*L) / (2.0*L); float y = sqrt(max(l1*l1 - x*x, 0.0));
+  vec2 m = a + u*x + vec2(-u.y, u.x)*y*bend*0.4; e = a + u*L; return m;   // front view: a bent knee shows mostly as a shorter leg
+}
+float human(vec2 p, float ph, float en, float st, float fem, float dress){
+  float b = ph * 6.28318, h = b * 0.5;
+  float bounce = 0.5 - 0.5*cos(b);
+  float sw = sin(h + st);
+  // feet: weight shifts side to side, the free foot lifts and steps
+  float lL = max(0.0, sw), lR = max(0.0, -sw);
+  vec2 fL = vec2(-0.17 - 0.05*en*sin(h*0.5 + st), 0.05 + 0.08*en*lL*lL);
+  vec2 fR = vec2( 0.17 + 0.05*en*cos(h*0.5 + st*1.7), 0.05 + 0.08*en*lR*lR);
+  vec2 hip = vec2(sw*0.075*en, 0.92 - 0.055*en*bounce);
+  float lean = sin(h + st + 0.6) * 0.11 * en;
+  vec2 up = vec2(-sin(lean), cos(lean)), sd = vec2(up.y, -up.x);
+  vec2 waist = hip + up*0.17, chest = hip + up*0.36, neck = hip + up*0.54;
+  vec2 head = neck + up*0.13 + vec2(sin(b + 0.8)*0.025*en - lean*0.06, 0.0);
+  float shW = 0.185 - 0.025*fem, hipW = 0.095 + 0.02*fem;
+  // head (with hair), neck
+  float d = el(p, head, vec2(0.09, 0.112));
+  if (fem > 0.5) d = smin(d, rc(p, head + vec2(0.0, 0.02), head + vec2(sin(b*0.5 + st)*0.03, -0.17), 0.095, 0.072), 0.03);
+  d = smin(d, rc(p, neck - up*0.03, head - up*0.06, 0.043, 0.04), 0.025);
+  // torso: chest, waist, hips
+  d = smin(d, rc(p, chest - sd*0.06, chest + sd*0.06, 0.11 + 0.01*(1.0 - fem), 0.11 + 0.01*(1.0 - fem)), 0.04);
+  d = smin(d, rc(p, chest, waist, 0.13 - 0.02*fem, 0.095), 0.06);
+  d = smin(d, rc(p, waist, hip - up*0.02, 0.095, 0.125 + 0.025*fem), 0.06);
+  vec2 shL = neck - up*0.07 - sd*shW, shR = neck - up*0.07 + sd*shW;
+  d = smin(d, rc(p, shL, shR, 0.055, 0.055), 0.07);
+  // arms (forward kinematics: shoulder and elbow angles from straight down, outward positive), four dance styles
+  for (int k = 0; k < 2; k++) {
+    float s = k == 0 ? -1.0 : 1.0; vec2 sh = k == 0 ? shL : shR;
+    float a1, a2;
+    if (st < 0.5)      { a1 = 0.6 + 0.3*en*sin(h + s);                a2 = -(1.45 + 0.45*en*sin(b + s*1.5)); }        // groove, fists in
+    else if (st < 1.5) { a1 = 2.45 + 0.30*en*sin(h + s*1.2);          a2 = 0.35*sin(b*0.5 + s); }                     // both arms up, swaying
+    else if (st < 2.5) { a1 = s < 0.0 ? 2.7 + 0.18*sin(h) : 0.45 + 0.35*en*sin(h);  a2 = s < 0.0 ? 0.25*sin(b*0.5) : -(1.3 + 0.5*sin(b)); }  // one hand up
+    else               { a1 = 1.05 + 0.85*en*sin(h*0.5 + s*1.1 + st);  a2 = 0.65*sin(h*0.5 + 1.0 + s*0.4); }          // slow flowing waves
+    vec2 e1 = sh + 0.28*dr(s*a1) * vec2(1.0, 1.0);
+    vec2 w1 = e1 + 0.25*dr(s*(a1 + a2));
+    d = smin(d, rc(p, sh, e1, 0.05, 0.04), 0.035);
+    d = smin(d, rc(p, e1, w1, 0.038, 0.028), 0.02);
+    d = smin(d, el(p, w1 + 0.04*dr(s*(a1 + a2)), vec2(0.032, 0.038)), 0.02);
+  }
+  // legs: hips to planted feet, knees out a little
+  float dl = 9.0;
+  for (int k = 0; k < 2; k++) {
+    float s = k == 0 ? -1.0 : 1.0; vec2 hp = hip + sd*hipW*s - up*0.05; vec2 ft = k == 0 ? fL : fR; vec2 an;
+    vec2 kn = ik(hp, ft, 0.44, 0.42, s, an);
+    float l = smin(rc(p, hp, kn, 0.078 + 0.008*fem, 0.05), rc(p, kn, an, 0.05, 0.032), 0.03);
+    l = smin(l, rc(p, an, an + vec2(s*0.06, -0.035), 0.03, 0.024), 0.02);
+    dl = min(dl, l);                       // the two legs stay apart; only the pair melts into the hips
+  }
+  d = smin(d, dl, 0.035);
+  if (dress > 0.5) { // a dress that swings with the hips
+    vec2 q = p - waist; float swg = sin(h + st + 0.5) * 0.1 * en;
+    float y = clamp(-q.y / 0.62, 0.0, 1.0); float wd = 0.11 + 0.2*y; float cx = swg*y*y;
+    float sk = max(abs(q.x - cx) - wd, max(q.y, -q.y - 0.62)) ;
+    d = smin(d, sk, 0.03);
+  }
+  return d;
+}
+vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
+  if (uVis < 0.004) discard;
+  vec2 p = (uv - vec2(0.5, 0.0)) * vec2(1.25 * uAspX, 2.3);
+  if (abs(p.x) > 0.95 || p.y > 2.2 || length((p - vec2(0.0, 1.05)) / vec2(0.85, 1.2)) > 1.05) discard;
+  float ph = uTime * ${(BPM / 60).toFixed(5)} + uSeed * 0.37;
+  float en = clamp(0.3 + uRms * 1.1 + uTrip * 0.5, 0.0, 1.25);
+  float st = mod(uSeed, 4.0), fem = mod(uSeed, 2.0), dress = (mod(uSeed, 3.0) < 1.5 && fem > 0.5) ? 1.0 : 0.0;
+  float d = human(p, ph, en, st, fem, dress);
+  if (uTrip > 0.001) { // the guitar break: two mirrored, delayed echoes
+    for (int k = 1; k < 3; k++) { float fk = float(k); vec2 q = p; q.x = abs(q.x) - 0.3*fk*uTrip;
+      d = min(d, human(q, ph - 0.15*fk, en, st, fem, dress) + 0.015*fk); }
+  }
+  float m = smoothstep(0.01, -0.01, d);
+  float rim = exp(-abs(d) * 60.0);
+  float deep = smoothstep(0.0, -0.07, d);
+  float smoke = noise(p * vec2(5.0, 3.5) + vec2(uSeed * 3.1, -uTime * 0.5));
+  float e = 0.45 + 0.9 * uRms + 0.3 * uSub;
+  vec3 L = lightAt(wp, n); float lit = clamp(dot(L, vec3(0.35)) * 2.2, 0.0, 1.0);
+  if (uMode < 0.5) {
+    // on the walls: a translucent ghost, dark teal smoke inside, gold glow at the edge
+    vec3 body = mix(DTEAL * 2.2, TEAL * 0.9, smoke) * (0.5 + 0.5 * deep) * (0.55 + 0.45 * e);
+    vec3 c = body + GOLDG * rim * (0.45 + 0.75 * e) * (0.7 + 0.3 * lit);
+    alpha = uVis * clamp(m * (0.30 + 0.22 * smoke + 0.15 * lit) + rim * 0.6, 0.0, 0.8);
+    return c;
+  }
+  // backlit against her picture: smoky dark body, warm gold rim, her picture shows through
+  vec3 c = mix(vec3(0.006, 0.02, 0.022), DTEAL * 1.5, smoke * 0.6) + WARM * rim * (0.6 + 0.8 * uHer);
+  alpha = uVis * clamp(m * (0.5 + 0.2 * smoke) + rim * 0.85, 0.0, 0.9);
+  return c;
+}`;
 const dancers = [];
 function dancer(seed, mode, w, h, parent) {
-  const m = mat({ frag: DANCER, transparent: true, depthWrite: false, uniforms: { uSeed: { value: seed }, uMode: { value: mode }, uVis: { value: 0 } } });
+  // render mode (the music video) keeps the original figures; live mode gets the human silhouettes on wider cards
+  if (!RENDER) w *= mode === 0 ? 3.4 / 2.6 : 1.9 / 1.5;
+  const m = mat({ frag: RENDER ? DANCER : DANCER2, transparent: true, depthWrite: false, uniforms: { uSeed: { value: seed }, uMode: { value: mode }, uVis: { value: 0 }, uAspX: { value: RENDER ? 1 : (mode === 0 ? 3.4 / 2.6 : 1.9 / 1.5) } } });
   const me = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); me.renderOrder = 2; (parent || scene).add(me); dancers.push(me); return me;
 }
 // wall shadows (left wall faces +x, right wall faces -x)
@@ -604,6 +801,69 @@ function camAt(t) {
 BS.camAt = camAt;
 function anchorFromCam(t) { const c = camAt(t); return { x: c.p[0], z: c.p[2], yaw: Math.atan2(-(c.l[0] - c.p[0]), -(c.l[2] - c.p[2])) }; }
 
+// ------------------------------------------------------------ live mode: gold music symbols floating through the hall
+// 90 camera-facing cards in ONE instanced draw call (180 triangles). Every card's path is computed in the vertex shader from
+// time, so the CPU does nothing per frame. They rise slowly, sway, turn, and every few seconds one symbol fades into another.
+// Only built in live mode; the music video never sees them.
+let floatSyms = null;
+if (!RENDER) {
+  const cv = document.createElement('canvas'); cv.width = 512; cv.height = 256; const g = cv.getContext('2d');
+  g.strokeStyle = g.fillStyle = '#fff'; g.lineCap = 'round'; g.lineJoin = 'round';
+  const head = (x, y, open) => { g.save(); g.translate(x, y); g.rotate(-0.45); g.beginPath(); g.ellipse(0, 0, 13, 9, 0, 0, 6.2832); if (open) { g.lineWidth = 4; g.stroke(); } else g.fill(); g.restore(); };
+  const line = (x1, y1, x2, y2, w) => { g.lineWidth = w; g.beginPath(); g.moveTo(x1, y1); g.lineTo(x2, y2); g.stroke(); };
+  const draws = [
+    () => { head(56, 92, false); line(68, 90, 68, 30, 4); },                                                     // quarter
+    () => { head(56, 92, false); line(68, 90, 68, 28, 4); g.lineWidth = 5; g.beginPath(); g.moveTo(68, 28); g.bezierCurveTo(78, 44, 96, 50, 88, 74); g.stroke(); }, // eighth
+    () => { head(40, 96, false); head(86, 88, false); line(52, 94, 52, 34, 4); line(98, 86, 98, 28, 4); line(52, 34, 98, 28, 9); },  // beamed
+    () => { g.lineWidth = 5; g.beginPath(); g.moveTo(66, 112); g.bezierCurveTo(50, 116, 48, 100, 60, 98); g.moveTo(62, 112); g.lineTo(70, 22);
+            g.bezierCurveTo(88, 34, 78, 56, 52, 72); g.bezierCurveTo(34, 86, 46, 104, 66, 100); g.bezierCurveTo(86, 96, 86, 74, 66, 74); g.bezierCurveTo(52, 76, 54, 90, 64, 88); g.stroke(); }, // treble clef
+    () => { g.lineWidth = 6; g.beginPath(); g.moveTo(40, 52); g.bezierCurveTo(48, 28, 92, 30, 88, 60); g.bezierCurveTo(86, 84, 60, 98, 38, 106); g.stroke();
+            g.beginPath(); g.arc(42, 54, 7, 0, 6.3); g.fill(); g.beginPath(); g.arc(102, 46, 4.5, 0, 6.3); g.fill(); g.beginPath(); g.arc(102, 66, 4.5, 0, 6.3); g.fill(); }, // bass clef
+    () => { line(54, 28, 54, 100, 4); line(74, 24, 74, 96, 4); line(40, 56, 88, 46, 8); line(40, 80, 88, 70, 8); },   // sharp
+    () => { line(52, 22, 52, 102, 4); g.lineWidth = 5; g.beginPath(); g.moveTo(52, 102); g.bezierCurveTo(90, 86, 84, 60, 52, 76); g.stroke(); }, // flat
+    () => { head(56, 92, true); line(68, 90, 68, 30, 4); }                                                       // half note
+  ];
+  g.shadowColor = '#fff'; g.shadowBlur = 10;
+  draws.forEach((f, i) => { g.save(); g.translate((i % 4) * 128, Math.floor(i / 4) * 128); f(); f(); g.restore(); });
+  const tex = new THREE.CanvasTexture(cv); tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+  const N = 90, base = new THREE.PlaneGeometry(1, 1), geo = new THREE.InstancedBufferGeometry();
+  geo.index = base.index; geo.setAttribute('position', base.getAttribute('position')); geo.setAttribute('uv', base.getAttribute('uv'));
+  const a = new Float32Array(N * 4); let r = 7.31;
+  const rnd = () => (r = (r * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < N; i++) { a[i * 4] = (rnd() * 2 - 1) * 4.6; a[i * 4 + 1] = rnd() * 6.0; a[i * 4 + 2] = 6 - rnd() * 27; a[i * 4 + 3] = rnd(); }
+  geo.setAttribute('aP', new THREE.InstancedBufferAttribute(a, 4)); geo.instanceCount = N;
+  const m = new THREE.ShaderMaterial({
+    uniforms: { uTime: U.uTime, uSig: U.uSig, uRms: U.uRms, uSub: U.uSub, uSplit: U.uSplit, uTex: { value: tex } },
+    vertexShader: `attribute vec4 aP; uniform float uTime, uSig, uRms, uSub, uSplit; varying vec2 vUv; varying float vA, vK0, vK1, vF;
+float hh(float x){ return fract(sin(x * 12.9898) * 43758.5453); }
+void main(){
+  float s = aP.w, sp = 0.09 + 0.08 * fract(s * 7.3);
+  float y = 0.8 + mod(aP.y + uTime * sp, 6.0);
+  vec3 c = vec3(aP.x + 0.7 * sin(uTime * 0.21 + s * 6.28), y, aP.z + 0.9 * cos(uTime * 0.17 + s * 4.0));
+  c.x += sign(c.x) * uSplit * 2.0;
+  float ph = uTime * 0.09 + s * 13.0, i0 = floor(ph);
+  vK0 = floor(hh(i0 + s * 91.0) * 8.0); vK1 = floor(hh(i0 + 1.0 + s * 91.0) * 8.0); vF = smoothstep(0.7, 1.0, fract(ph));
+  float fade = smoothstep(0.8, 1.7, y) * smoothstep(6.8, 5.9, y);
+  float size = (0.32 + 0.26 * fract(s * 3.1)) * (1.0 + 0.3 * uSub);
+  vec4 mv = modelViewMatrix * vec4(c, 1.0);
+  float ang = sin(uTime * 0.3 + s * 5.0) * 0.45;
+  vec2 o = position.xy * size; mv.xy += vec2(cos(ang) * o.x - sin(ang) * o.y, sin(ang) * o.x + cos(ang) * o.y);
+  float dist = length(mv.xyz);
+  vA = fade * uSig * (0.3 + 1.0 * uRms + 0.35 * uSub) * (0.55 + 0.45 * sin(uTime * 1.3 + s * 20.0)) * smoothstep(0.5, 1.4, dist) * exp(-dist * 0.035);
+  vUv = uv; gl_Position = projectionMatrix * mv;
+}`,
+    fragmentShader: `uniform sampler2D uTex; varying vec2 vUv; varying float vA, vK0, vK1, vF;
+vec2 cellUv(float k){ return (vec2(mod(k, 4.0), 1.0 - floor(k / 4.0)) + vUv) * vec2(0.25, 0.5); }
+void main(){
+  if (vA < 0.003) discard;
+  float t = mix(texture2D(uTex, cellUv(vK0)).a, texture2D(uTex, cellUv(vK1)).a, vF);
+  gl_FragColor = vec4(vec3(1.0, 0.74, 0.32) * t * vA * 1.6, 1.0);
+}`,
+    transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+  });
+  floatSyms = new THREE.Mesh(geo, m); floatSyms.frustumCulled = false; floatSyms.renderOrder = 5; scene.add(floatSyms);
+}
+
 // ------------------------------------------------------------ the score: every uniform as a function of song time
 const tmpV = new THREE.Vector3();
 let lastT = -99;
@@ -621,6 +881,8 @@ BS.update = function (t, clock) {
   const bridgeDark = env(t, S.bridge, S.fch + 0.8, 1.6, 1.6);
   const reveal = up(t, S.place, 3.2) * (1 - up(t, S.opening, 4.0) * 0.5) * (1 - up(t, S.outro + 2, 10) * 0.6) * (t < S.END + 1 ? 1 : 0);
   const split = sm((t - S.opening) / (S.two + 1.5 - S.opening));
+  U.uSig.value = RENDER ? 0 : (t >= 0 && t < S.END + 0.5 ? up(t, 0, 6) : 0) * (1 - 0.55 * bridgeDark);
+  if (floatSyms) floatSyms.visible = U.uSig.value > 0.002;
   U.uTrip.value = trip; U.uReveal.value = reveal * (1 - 0.45 * up(t, S.fch, 3)); U.uDark.value = bridgeDark; U.uSplit.value = split;
   U.uPatina.value = sm((t - S.v1 + 0.5) / 14.0) * (1 - 0.0);
   // ---- the far door: ajar, a fraction wider on "slow", wide on the choruses, gone when the room opens
@@ -684,12 +946,12 @@ BS.update = function (t, clock) {
   U.uFogD.value = lerp(t < 0 ? 0.075 : 0.055, 0.012, sp);
   // ---- dancers
   const dVis = clamp(env(t, S.ch1 - 1, S.inst + 4, 2, 3) + trip + env(t, S.map, LP.b + 2, 1.5, 2) + env(t, S.ch2 - 1, S.bridge + 1, 2, 2) + env(t, S.fch - 1, S.END, 2, 0.1) * 0.8 + env(t, S.v1 + 4, S.sp2 + 1, 3, 2) * 0.6, 0, 1);
-  for (const d of wallD) d.material.uniforms.uVis.value = dVis;
+  for (const d of wallD) { d.material.uniforms.uVis.value = dVis; if (!RENDER) d.visible = dVis > 0.004; }
   // during the map verse one shadow runs ahead of her light along the right wall: the shadow she chases
   const chase = wallD[5];
   if (t > S.map - 1 && t < LP.b + 3) { const s = clamp((t - LP.a) / (LP.b - LP.a), 0, 1) + 0.12; chase.position.z = lightPath(Math.min(1.08, s))[2] - 1.0; } else chase.position.z = chase.userData.base;
   const bVis = t < 0 ? 0 : clamp(0.25 + up(t, S.ch1, 3) * 0.5 + split * 0.4 + trip * 0.3 - leave * 0.7 - bridgeDark * 0.6, 0, 1) * (1 - black);
-  for (const d of backD) d.material.uniforms.uVis.value = bVis;
+  for (const d of backD) { d.material.uniforms.uVis.value = bVis; if (!RENDER) d.visible = bVis > 0.004; }
   // ---- his line(s)
   let head = null, headW = 0;
   for (const def of LINE_DEFS) {

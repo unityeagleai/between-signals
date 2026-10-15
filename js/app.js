@@ -1,17 +1,17 @@
 // Between Signals: live mode. You start in the dark antechamber facing the open door; stepping through starts the song.
-// WebXR (thumbsticks) or flat walk (WASD / arrows / drag / touch pads). Spatial audio by timing: the vocal stem is
-// heard from his line while he speaks and from her light while she sings, with 0.3 s equal-power crossfades.
+// WebXR (thumbsticks) or flat walk (WASD / arrows / drag / touch pads). The song is one file (the master mix), heard from a
+// fixed point overhead. v2 (Oct 15): human silhouettes and the living room (gold music symbols on dark teal) are in world.js.
 (function () {
 if (window.BS && window.BS.RENDER) return;
 const BS = window.BS, U = BS.U, S = BS.S, renderer = BS.renderer, scene = BS.scene, camera = BS.camera, rig = BS.rig;
 const { clamp, sm, lerp } = BS.util;
 const HX = 6.0, HZ0 = 8.0, HZ1 = -21.6, AW = 2.6, AZ1 = 14.2, EW = 0.75;
-const PRE_T = -2.0, XF = 0.3;
+const PRE_T = -2.0;
 const P = { x: 0, z: 12.6, yaw: 0, pitch: 0.03, eye: 1.6 };
 const $ = id => document.getElementById(id);
 const capEl = $('cap'), hintEl = $('hint'), statusEl = $('status'), ui = $('ui');
 let state = 'idle', songT = PRE_T, clock0 = 0, endAt = 0, started = false, inVR = false, vrPending = false, rigY = 0;
-let TIM = null, HAND = [], CAPS = [];
+let TIM = null, CAPS = [];
 const dbg = window.__bs = { state: 'idle', t: PRE_T, cap: '', capsShown: 0, audio: 'none', mode: 'n/a', errors: [] };
 
 // ------------------------------------------------------------ loading (small things first; the song loads when you choose a mode)
@@ -19,100 +19,84 @@ let imgOk = false;
 const imgWait = new Promise(r => { const c = () => BS.imgReady ? r() : setTimeout(c, 60); c(); setTimeout(r, 8000); });
 Promise.all([BS.loadFeat(), fetch(BS.asset('timing.json')).then(r => r.json()), imgWait]).then(([_, tim]) => {
   BS.buildFeatTex(); TIM = tim; CAPS = tim.captions;
-  // handovers: the first window of each run of one voice
-  const W = tim.his.map(w => ({ s: w[0], e: w[1], who: 1 })).concat(tim.her.map(w => ({ s: w[0], e: w[1], who: 0 }))).sort((a, b) => a.s - b.s);
-  let last = -1; for (const w of W) { if (w.who !== last) HAND.push({ t: w.s, who: w.who }); last = w.who; }
   $('bWalk').disabled = false; $('bVR').disabled = !navigator.xr;
   if (navigator.xr && navigator.xr.isSessionSupported) navigator.xr.isSessionSupported('immersive-vr').then(ok => { $('bVR').disabled = !ok; if (!ok) $('bVR').title = 'No VR headset here'; }).catch(() => {});
   statusEl.textContent = BS.isHeadset ? 'Ready. Tap ENTER VR.' : 'Ready.';
   if (BS.QS.has('autostart')) startFlat();
 }).catch(e => { statusEl.textContent = 'Could not load the room: ' + e; console.error(e); });
 
-// 0 = his position, 1 = her position. Before the first handover it is hers (she sings first).
-function herWeight(t) {
-  let prev = 0, cur = null;
-  for (let i = 0; i < HAND.length; i++) { if (HAND[i].t - XF / 2 <= t) { prev = cur ? cur.who : 0; cur = HAND[i]; } else break; }
-  if (!cur) return 1;
-  const f = sm((t - (cur.t - XF / 2)) / XF), a = prev === 0 ? 1 : 0, b = cur.who === 0 ? 1 : 0;
-  return lerp(a, b, f);
-}
 function captionAt(t) { for (const c of CAPS) if (t >= c[0] && t < c[1]) return c[2]; return ''; }
 
-// ------------------------------------------------------------ audio: two streamed MP3s (no big decode in memory)
-let actx = null, inst = null, voc = null, gHis = null, gHer = null, pHis = null, pHer = null, master = null, audioOK = false;
-function mkEl(name) { const a = new Audio(); a.crossOrigin = 'anonymous'; a.preload = 'auto'; a.setAttribute('playsinline', ''); a.src = BS.asset('audio/' + name); return a; }
-function mkPanner() {
-  const p = actx.createPanner(); p.panningModel = 'HRTF'; p.distanceModel = 'inverse'; p.refDistance = 3; p.rolloffFactor = 0.6; p.maxDistance = 60;
-  return p;
+// ------------------------------------------------------------ audio: ONE file, the full master mix, heard from a fixed point overhead
+// v1 played two tracks (vocals + instruments) and re-seeked the vocals whenever they drifted 50 ms from the instruments;
+// every re-seek dropped the voice for a moment, and the voice also swung between two moving HRTF panners. Now there is one
+// element, one fixed panner straight above you that never moves, and nothing ever seeks the audio while the song plays:
+// the visuals follow the music's clock, never the other way round. The whole file is downloaded once (blob) so the
+// song can't stall on the network halfway through.
+const SONG = 'audio/between_signals.mp3';
+let actx = null, song = null, master = null, panner = null, audioOK = false, blobReady = false, blobUrl = null;
+const aud = dbg.aud = { waiting: 0, stalled: 0, seeks: 0, resumes: 0, src: 'none' };
+function fetchSong() {
+  fetch(BS.asset(SONG)).then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); }).then(b => {
+    blobUrl = URL.createObjectURL(b); blobReady = true; aud.src = 'blob';
+    if (song && song.paused && state !== 'song') { song.src = blobUrl; song.load(); }
+  }).catch(e => { console.warn('song download failed, streaming instead', e); blobReady = true; aud.src = 'stream'; });
 }
 function unlockAudio() {
   try {
     if (!actx) {
-      const AC = window.AudioContext || window.webkitAudioContext; actx = new AC();
-      inst = mkEl('instruments.mp3'); voc = mkEl('vocals.mp3');
-      master = actx.createGain(); master.gain.value = 1; master.connect(actx.destination);
-      const si = actx.createMediaElementSource(inst), sv = actx.createMediaElementSource(voc);
-      const gi = actx.createGain(); gi.gain.value = 0.95; si.connect(gi); gi.connect(master);          // instruments: not positional
-      gHis = actx.createGain(); gHer = actx.createGain(); gHis.gain.value = 0; gHer.gain.value = 1;
-      pHis = mkPanner(); pHer = mkPanner();
-      sv.connect(gHis); gHis.connect(pHis); pHis.connect(master);
-      sv.connect(gHer); gHer.connect(pHer); pHer.connect(master);
-      for (const el of [inst, voc]) { el.addEventListener('error', () => { dbg.audio = 'error'; console.warn('audio failed to load: ' + el.src); }); }
+      const AC = window.AudioContext || window.webkitAudioContext; actx = new AC({ latencyHint: 'playback' });
+      song = new Audio(); song.crossOrigin = 'anonymous'; song.preload = 'metadata'; song.setAttribute('playsinline', ''); song.src = BS.asset(SONG); aud.src = 'stream';
+      song.addEventListener('error', () => { dbg.audio = 'error'; console.warn('audio failed to load: ' + song.src); });
+      song.addEventListener('waiting', () => { aud.waiting++; });
+      song.addEventListener('stalled', () => { if (state === 'song') aud.stalled++; });
+      song.addEventListener('seeking', () => { if (state === 'song' && song.currentTime > 0.5) aud.seeks++; });
+      const src = actx.createMediaElementSource(song);
+      // overhead: straight up and a touch forward, in the listener's own frame. Listener and panner are set once and never move,
+      // so turning or walking can't pan the music around.
+      panner = actx.createPanner(); panner.panningModel = 'HRTF'; panner.distanceModel = 'linear'; panner.refDistance = 1; panner.maxDistance = 10000; panner.rolloffFactor = 0;
+      if (panner.positionX) { panner.positionX.value = 0; panner.positionY.value = 2.6; panner.positionZ.value = -0.9; } else panner.setPosition(0, 2.6, -0.9);
+      const L = actx.listener;
+      if (L.positionX) { L.positionX.value = 0; L.positionY.value = 0; L.positionZ.value = 0; L.forwardX.value = 0; L.forwardY.value = 0; L.forwardZ.value = -1; L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
+      else { L.setPosition(0, 0, 0); L.setOrientation(0, 0, -1, 0, 1, 0); }
+      master = actx.createGain(); master.gain.value = 1.15;
+      src.connect(panner); panner.connect(master); master.connect(actx.destination);
+      actx.addEventListener('statechange', () => { if (actx.state !== 'running' && state === 'song') { aud.resumes++; actx.resume().catch(() => {}); } });
       audioOK = true; dbg.audio = 'ready';
-      // prime both elements inside the click so the later start (at the door) is allowed
-      master.gain.value = 0;
-      Promise.all([inst, voc].map(el => el.play().then(() => { if (state !== 'song') { el.pause(); el.currentTime = 0; } }).catch(() => {}))).then(() => { master.gain.value = 1; });
+      // prime the element inside the tap so the start at the door is allowed (muted, rewound before the song)
+      song.muted = true;
+      song.play().then(() => { if (state !== 'song') { song.pause(); song.currentTime = 0; } song.muted = false; }).catch(() => { song.muted = false; });
+      fetchSong();
     }
-    if (actx.state === 'suspended') actx.resume();
+    if (actx.state !== 'running') actx.resume().catch(() => {});
   } catch (e) { console.warn('audio unavailable', e); dbg.audio = 'unavailable'; }
 }
 function startAudio() {
   if (!audioOK) return;
-  if (actx.state === 'suspended') actx.resume();
-  master.gain.cancelScheduledValues(actx.currentTime); master.gain.value = 1;
-  inst.currentTime = 0; voc.currentTime = 0;
-  inst.play().catch(e => console.warn('play blocked', e)); voc.play().catch(() => {});
+  if (actx.state !== 'running') actx.resume().catch(() => {});
+  if (blobUrl && song.src !== blobUrl) song.src = blobUrl;
+  song.muted = false; song.currentTime = 0;
+  song.play().catch(e => console.warn('play blocked', e));
   dbg.audio = 'playing';
 }
-function stopAudio() { if (!audioOK) return; inst.pause(); voc.pause(); }
-let syncT = 0;
+// headless tests only (?test): jump the song to a time to photograph a section
+if (BS.QS && BS.QS.has('test')) BS.testSeek = t => { if (audioOK) song.currentTime = t; };
+function stopAudio() { if (audioOK) song.pause(); }
+// the song's clock: the audio element is the master. Visuals ease to it and never push it.
+let lastCT = -1, lastCTAt = 0, ctxCheck = 0;
 function songTime(dt) {
   const now = performance.now() / 1000; let t = now - clock0;
-  if (audioOK && !inst.paused && inst.readyState >= 2) {
-    const ct = inst.currentTime;
+  if (audioOK && !song.paused && song.readyState >= 2) {
+    const ct = song.currentTime;
+    if (ct !== lastCT) { lastCT = ct; lastCTAt = now; }
     if (Math.abs(ct - t) > 0.08) { clock0 = now - ct; t = ct; }
-    if ((syncT += dt) > 0.5) { syncT = 0; if (!voc.paused && Math.abs(voc.currentTime - ct) > 0.05) voc.currentTime = ct + 0.03; if (voc.paused && ct < S.END - 1) voc.play().catch(() => {}); }
-  } else if (audioOK && state === 'song' && inst.readyState < 3 && !inst.ended) {
-    clock0 = now - inst.currentTime; t = inst.currentTime;   // buffering: wait with the music
+  } else if (audioOK && state === 'song' && !song.ended && song.readyState < 3) {
+    clock0 = now - song.currentTime; t = song.currentTime;   // buffering: the room waits with the music
   }
+  if ((ctxCheck += dt) > 1 && audioOK && state === 'song') { ctxCheck = 0; if (actx.state !== 'running') { aud.resumes++; actx.resume().catch(() => {}); } if (song.paused && !song.ended && t < S.END - 1) song.play().catch(() => {}); }
   return t;
 }
-// her position: the strongest bloom, else the far doorway. His: the head of the line, else where it last was.
-const hisPos = new THREE.Vector3(-1.5, 1.8, 6), herPos = new THREE.Vector3(0, 2.6, HZ1 + 0.6), _v = new THREE.Vector3(), _h = new THREE.Vector3(), _e = new THREE.Vector3();
-function placeVoice(p, target, head, dt) {
-  _v.copy(target).sub(head); let d = _v.length(); if (d < 1e-3) { _v.set(0, 0, -1); d = 1; }
-  _v.multiplyScalar(clamp(d, 1.5, 5.0) / d).add(head);       // keep the direction, cap the distance so the voice keeps its level
-  const k = Math.min(1, dt * 5);
-  const t = actx.currentTime;
-  if (p.positionX) { p.positionX.setTargetAtTime(_v.x, t, 0.05); p.positionY.setTargetAtTime(_v.y, t, 0.05); p.positionZ.setTargetAtTime(_v.z, t, 0.05); }
-  else p.setPosition(_v.x, _v.y, _v.z);
-  return k;
-}
-function audioTick(t, dt, head, fwd) {
-  const B = U.uBlob.value; let best = null;
-  for (const b of B) if (b.w > 0.05 && (!best || b.w > best.w)) best = b;
-  _e.set(0, 2.6, HZ1 + 0.6); if (best) _e.set(best.x, best.y, best.z);
-  herPos.lerp(_e, Math.min(1, dt * 3));
-  const lh = U.uLineHead.value; if (lh.w > 0.05) hisPos.lerp(_e.set(lh.x, lh.y, lh.z), Math.min(1, dt * 6));
-  const w = state === 'song' ? herWeight(t) : 1; dbg.herW = +w.toFixed(2);
-  if (!audioOK) return;
-  const now = actx.currentTime;
-  gHer.gain.setTargetAtTime(Math.sin(w * Math.PI / 2), now, 0.015); gHis.gain.setTargetAtTime(Math.cos(w * Math.PI / 2), now, 0.015);
-  placeVoice(pHer, herPos, head, dt); placeVoice(pHis, hisPos, head, dt);
-  const L = actx.listener;
-  if (L.positionX) { L.positionX.setTargetAtTime(head.x, now, 0.02); L.positionY.setTargetAtTime(head.y, now, 0.02); L.positionZ.setTargetAtTime(head.z, now, 0.02); L.forwardX.setTargetAtTime(fwd.x, now, 0.02); L.forwardY.setTargetAtTime(fwd.y, now, 0.02); L.forwardZ.setTargetAtTime(fwd.z, now, 0.02); L.upX.value = 0; L.upY.value = 1; L.upZ.value = 0; }
-  else if (L.setPosition) { L.setPosition(head.x, head.y, head.z); L.setOrientation(fwd.x, fwd.y, fwd.z, 0, 1, 0); }
-}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && actx && state === 'song' && actx.state !== 'running') actx.resume().catch(() => {}); });
 
 // ------------------------------------------------------------ captions + hints: DOM on screen, a panel under your gaze in VR
 const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 256; const cx = cv.getContext('2d');
@@ -205,7 +189,7 @@ function resetToStart() {
 
 // ------------------------------------------------------------ frame
 let last = performance.now(), walkS = 0, fpsAcc = 0, fpsN = 0;
-const _q = new THREE.Quaternion(), _fwd = new THREE.Vector3(), _eu = new THREE.Euler();
+const _h = new THREE.Vector3(), _q = new THREE.Quaternion(), _fwd = new THREE.Vector3(), _eu = new THREE.Euler();
 function frame() {
   const now = performance.now(); let dt = (now - last) / 1000; last = now; if (dt > 0.1) dt = 0.1;
   fpsAcc += dt; fpsN++; if (fpsAcc > 1) { dbg.fps = +(fpsN / fpsAcc).toFixed(1); fpsAcc = 0; fpsN = 0; }
@@ -238,10 +222,9 @@ function frame() {
   } else if (state === 'end') { songT = S.END + 0.2; if (now - endAt > 4000) resetToStart(); }
   else songT = PRE_T;
   BS.update(songT, now / 1000);
-  audioTick(songT, dt, _h, _fwd);
   textTick(songT, dt);
   dbg.state = state; dbg.t = +songT.toFixed(2); dbg.p = [+P.x.toFixed(2), +P.z.toFixed(2)];
-  if (audioOK) { dbg.instT = +inst.currentTime.toFixed(2); dbg.vocT = +voc.currentTime.toFixed(2); dbg.ctx = actx.state; }
+  if (audioOK) { dbg.songT = +song.currentTime.toFixed(2); dbg.ctx = actx.state; dbg.paused = song.paused; }
   renderer.render(scene, camera);
 }
 BS.liveFrame = frame;
