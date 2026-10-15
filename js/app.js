@@ -1,6 +1,8 @@
 // Between Signals: live mode. You start in the dark antechamber facing the open door; stepping through starts the song.
 // WebXR (thumbsticks) or flat walk (WASD / arrows / drag / touch pads). The song is one file (the master mix), heard from a
 // fixed point overhead. v2 (Oct 15): human silhouettes and the living room (gold music symbols on dark teal) are in world.js.
+// v3 (Oct 15): the approved concept look. No captions: every lyric line is one gold ribbon that sways like a soundwave in
+// front of you as it's sung (lyrics.json, aligned to the transcript). Constellation ceiling, concrete, cutout are in world.js.
 (function () {
 if (window.BS && window.BS.RENDER) return;
 const BS = window.BS, U = BS.U, S = BS.S, renderer = BS.renderer, scene = BS.scene, camera = BS.camera, rig = BS.rig;
@@ -25,7 +27,7 @@ Promise.all([BS.loadFeat(), fetch(BS.asset('timing.json')).then(r => r.json()), 
   if (BS.QS.has('autostart')) startFlat();
 }).catch(e => { statusEl.textContent = 'Could not load the room: ' + e; console.error(e); });
 
-function captionAt(t) { for (const c of CAPS) if (t >= c[0] && t < c[1]) return c[2]; return ''; }
+function captionAt(t) { for (const c of CAPS) if (t >= c[0] && t < c[1]) return c[2]; return ''; }   // (v3: not shown any more)
 
 // ------------------------------------------------------------ audio: ONE file, the full master mix, heard from a fixed point overhead
 // v1 played two tracks (vocals + instruments) and re-seeked the vocals whenever they drifted 50 ms from the instruments;
@@ -81,6 +83,7 @@ function startAudio() {
 }
 // headless tests only (?test): jump the song to a time to photograph a section
 if (BS.QS && BS.QS.has('test')) BS.testSeek = t => { if (audioOK) song.currentTime = t; };
+if (BS.QS && BS.QS.has('test')) BS.testPose = (x, z, yaw, pitch) => { P.x = x; P.z = z; P.yaw = yaw; P.pitch = pitch; };
 function stopAudio() { if (audioOK) song.pause(); }
 // the song's clock: the audio element is the master. Visuals ease to it and never push it.
 let lastCT = -1, lastCTAt = 0, ctxCheck = 0;
@@ -119,10 +122,137 @@ function drawVR(txt, small) {
 let hintTxt = '', hintT = 0, lastCap = '';
 function hint(txt, secs) { hintTxt = txt; hintT = secs || 6; hintEl.textContent = txt; hintEl.style.opacity = txt ? 1 : 0; }
 function textTick(t, dt) {
-  const c = state === 'song' ? captionAt(t) : '';
-  if (c !== lastCap) { if (c) { capEl.textContent = c; dbg.capsShown++; } capEl.style.opacity = c ? 1 : 0; lastCap = c; dbg.cap = c; }
+  // v3: no captions on screen or under your gaze; the words live in the room as ribbons (below). Hints still show.
   if (hintT > 0) { hintT -= dt; if (hintT <= 0) { hintEl.style.opacity = 0; } }
-  if (inVR) drawVR(c || (hintT > 0 ? hintTxt : ''), !c);
+  if (inVR) drawVR(hintT > 0 ? hintTxt : '', true);
+  ribbonTick(t, dt);
+}
+
+// ------------------------------------------------------------ lyric ribbons
+// One connected gold ribbon per line, ~3 m in front of you and curved around you so the ends stay as close as the middle.
+// Words light up as they're sung; the ribbon sways gently (amplitude follows the music, kept small so it stays readable)
+// and drifts up and away when the next line comes. Her lines sit a little higher (semibold), his a little lower (italic).
+let LYR = [];
+fetch(BS.asset('lyrics.json')).then(r => r.json()).then(j => { LYR = j; dbg.lyrics = j.length; }).catch(e => console.warn('lyrics', e));
+if (document.fonts && document.fonts.load) { document.fonts.load('600 100px BSRibbonU'); document.fonts.load('italic 400 100px BSRibbonM'); }
+const RB_W = 4096, RB_H = 256, RB_PX = 0.00102, RB_R = 3.0, RB_NW = 24;
+const RIB_VS = `uniform float uTime, uAmp, uW, uH, uR, uLam;
+varying vec2 vUv;
+void main(){
+  vUv = uv;
+  float X = position.x * uW, Y = position.y * uH;
+  float k = 6.2831853 / uLam;
+  Y += sin(X * k - uTime * 1.5) * uAmp + sin(X * k * 2.3 + uTime * 1.1) * uAmp * 0.22;
+  float dz = sin(X * k * 0.7 - uTime * 1.2 + 1.3) * uAmp * 0.8;
+  float th = X / uR;
+  vec3 p = vec3(sin(th) * (uR + dz), Y, uR - cos(th) * (uR + dz));
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+}`;
+const RIB_FS = `uniform sampler2D uTex; uniform float uWx[${RB_NW}], uWa[${RB_NW}]; uniform float uFade, uStaff, uK, uRms;
+varying vec2 vUv;
+void main(){
+  vec4 tx = texture2D(uTex, vUv);
+  float a = 0.0;
+  for (int i = 0; i < ${RB_NW}; i++) { if (vUv.x >= uWx[i]) a = uWa[i]; }
+  vec3 core = mix(vec3(1.0, 0.93, 0.74), vec3(0.98, 0.88, 0.72), uK);
+  vec3 gold = mix(vec3(1.0, 0.72, 0.30), vec3(0.92, 0.64, 0.36), uK);
+  vec3 col = core * tx.r * a * 0.95 + gold * tx.g * a * 0.75 + gold * tx.b * uStaff * (0.22 + 0.35 * uRms);
+  gl_FragColor = vec4(col * uFade, 1.0);
+}`;
+const ribbons = [];
+for (let i = 0; i < 4; i++) {
+  const cv2 = document.createElement('canvas'); cv2.width = RB_W; cv2.height = RB_H;
+  const tex = new THREE.CanvasTexture(cv2); tex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+  tex.minFilter = THREE.LinearMipmapLinearFilter; tex.generateMipmaps = true;
+  const uni = { uTex: { value: tex }, uTime: { value: 0 }, uAmp: { value: 0.03 }, uW: { value: 1 }, uH: { value: RB_H * RB_PX }, uR: { value: RB_R }, uLam: { value: 2.3 },
+    uWx: { value: new Array(RB_NW).fill(2) }, uWa: { value: new Array(RB_NW).fill(0) }, uFade: { value: 0 }, uStaff: { value: 0 }, uK: { value: 0 }, uRms: { value: 0 } };
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 128, 1), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: RIB_VS, fragmentShader: RIB_FS,
+    transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+  m.frustumCulled = false; m.renderOrder = 50; m.visible = false; scene.add(m);
+  ribbons.push({ cv: cv2, cx: cv2.getContext('2d'), tex, uni, m, li: -1, wx: [], born: 0, dying: -1, ax: 0, az: 0, ay: 0, yaw: 0, lift: 0 });
+}
+function drawRibbon(r, L) {
+  const c = r.cx; c.clearRect(0, 0, RB_W, RB_H);
+  let fs = 118; const fam = L.s === 'm' ? 'italic 400 %px BSRibbonM, Georgia, serif' : '600 %px BSRibbonU, Georgia, serif';
+  const words = L.text.split(' ');
+  let ws, sp, tw;
+  for (;;) {
+    c.font = fam.replace('%', fs); sp = c.measureText(' ').width; ws = words.map(w => c.measureText(w).width);
+    tw = ws.reduce((a, b) => a + b, 0) + sp * (words.length - 1);
+    if (tw < RB_W - 200 || fs < 60) break; fs -= 6;
+  }
+  const x0 = (RB_W - tw) / 2, base = RB_H / 2 + fs * 0.33;
+  const xs = []; let x = x0; for (let i = 0; i < words.length; i++) { xs.push(x); x += ws[i] + sp; }
+  c.globalCompositeOperation = 'lighter'; c.textBaseline = 'alphabetic';
+  // G: soft glow (shadow only: the text itself is drawn far off the canvas)
+  c.save(); c.shadowColor = 'rgb(0,255,0)'; c.shadowBlur = 22; c.shadowOffsetX = 10000; c.fillStyle = 'rgb(0,255,0)';
+  words.forEach((w, i) => c.fillText(w, xs[i] - 10000, base)); c.restore();
+  // B: two thin staff lines framing the words, fading out at the ends
+  const gx0 = x0 - 120, gx1 = x0 + tw + 120, g = c.createLinearGradient(gx0, 0, gx1, 0);
+  g.addColorStop(0, 'rgba(0,0,255,0)'); g.addColorStop(0.12, 'rgba(0,0,255,1)'); g.addColorStop(0.88, 'rgba(0,0,255,1)'); g.addColorStop(1, 'rgba(0,0,255,0)');
+  c.fillStyle = g; c.fillRect(gx0, base - fs * 1.02, gx1 - gx0, 3); c.fillRect(gx0, base + fs * 0.36, gx1 - gx0, 3);
+  // R: crisp letters
+  c.fillStyle = 'rgb(255,0,0)'; words.forEach((w, i) => c.fillText(w, xs[i], base));
+  r.tex.needsUpdate = true;
+  r.wx = xs.map(v => v / RB_W);
+  const wxu = r.uni.uWx.value; for (let i = 0; i < RB_NW; i++) wxu[i] = i < r.wx.length ? (i === 0 ? 0 : r.wx[i] - sp * 0.5 / RB_W) : 2;
+  // only the used width becomes geometry, so the curve hugs the words
+  r.u0 = Math.max(0, (x0 - 140) / RB_W); r.u1 = Math.min(1, (x0 + tw + 140) / RB_W);
+  const gm = r.m.geometry, uv = gm.attributes.uv, pos = gm.attributes.position;
+  for (let i = 0; i < uv.count; i++) { const fx = pos.getX(i) + 0.5; uv.setX(i, r.u0 + (r.u1 - r.u0) * fx); }
+  uv.needsUpdate = true;
+  r.uni.uW.value = (r.u1 - r.u0) * RB_W * RB_PX;
+  r.uni.uK.value = L.s === 'm' ? 1 : 0;
+}
+const _rh = new THREE.Vector3();
+function placeRibbon(r, snap, dt) {
+  camera.getWorldPosition(_rh);
+  const L = LYR[r.li], dy = L.s === 'm' ? -0.02 : 0.30;
+  if (snap) { r.yaw = BS.viewer.yaw; r.ax = _rh.x; r.az = _rh.z; r.ay = _rh.y + dy; }
+  else if (r.dying < 0) {
+    let d = BS.viewer.yaw - r.yaw; d = Math.atan2(Math.sin(d), Math.cos(d));
+    if (Math.abs(d) > 0.3) r.yaw += (d - Math.sign(d) * 0.3) * Math.min(1, dt * 2.0);   // lazy follow: stays put for small head turns
+    const k = Math.min(1, dt * 1.6); r.ax += (_rh.x - r.ax) * k; r.az += (_rh.z - r.az) * k; r.ay += (_rh.y + dy - r.ay) * k;
+  }
+  const R = RB_R + r.lift * 0.6;
+  r.m.position.set(r.ax - Math.sin(r.yaw) * R, r.ay + r.lift * 0.45, r.az - Math.cos(r.yaw) * R);
+  r.m.rotation.set(0, r.yaw, 0);
+  r.uni.uR.value = R;
+}
+if (BS.QS && BS.QS.has('test')) BS.ribbons = ribbons;
+let nextLine = 0;
+function ribbonsReset() { for (const r of ribbons) { r.m.visible = false; r.li = -1; r.dying = -1; } nextLine = 0; }
+function ribbonTick(t, dt) {
+  const now = performance.now() / 1000;
+  if (state !== 'song' || !LYR.length) { if (ribbons.some(r => r.li >= 0)) ribbonsReset(); return; }
+  if (nextLine > 0 && t < LYR[nextLine - 1].w[0] - 1.0) {   // jumped back (restart/seek): rewind
+    for (const r of ribbons) { r.m.visible = false; r.li = -1; r.dying = -1; }
+    nextLine = 0; while (nextLine < LYR.length && LYR[nextLine].w[0] - 0.45 <= t && LYR[nextLine].end + 1.0 < t) nextLine++;
+  }
+  while (nextLine < LYR.length && t >= LYR[nextLine].w[0] - 0.45) {
+    const L = LYR[nextLine];
+    if (t < L.end + 1.0) {
+      // the previous line of the same voice drifts up and away
+      for (const r of ribbons) if (r.li >= 0 && r.dying < 0 && LYR[r.li].s === L.s) r.dying = now;
+      let r = ribbons.find(q => q.li < 0) || ribbons.reduce((a, b) => (a.dying >= 0 && (b.dying < 0 || a.dying < b.dying)) ? a : b);
+      r.li = nextLine; r.dying = -1; r.born = now; r.lift = 0; drawRibbon(r, L); placeRibbon(r, true, dt); r.m.visible = true;
+      dbg.cap = L.text; dbg.capsShown++;
+    }
+    nextLine++;
+  }
+  const rms = U.uRms.value;
+  for (const r of ribbons) {
+    if (r.li < 0) continue;
+    const L = LYR[r.li];
+    if (r.dying < 0 && t > L.end + 2.2) r.dying = now;
+    let fade = clamp((t - (L.w[0] - 0.45)) / 0.45, 0, 1);
+    if (r.dying >= 0) { const k = (now - r.dying) / 1.1; r.lift = k * k * 0.5 + k * 0.25; fade *= clamp(1 - k, 0, 1); if (k >= 1) { r.li = -1; r.m.visible = false; continue; } }
+    const wa = r.uni.uWa.value;
+    for (let i = 0; i < RB_NW; i++) wa[i] = i < L.w.length ? sm(clamp((t - L.w[i] + 0.12) / 0.3, 0, 1)) : 0;
+    r.uni.uFade.value = fade; r.uni.uStaff.value = fade; r.uni.uRms.value = rms;
+    r.uni.uTime.value = now; r.uni.uAmp.value = 0.018 + 0.05 * clamp(rms, 0, 1);
+    placeRibbon(r, false, dt);
+  }
 }
 
 // ------------------------------------------------------------ input
@@ -179,11 +309,11 @@ function move(dx, dz) {
 
 // ------------------------------------------------------------ the song's life: before the door, during, after
 function startSong() {
-  state = 'song'; clock0 = performance.now() / 1000; songT = 0; BS.resetLines(); startAudio();
+  state = 'song'; clock0 = performance.now() / 1000; songT = 0; BS.resetLines(); ribbonsReset(); startAudio();
   hint('', 0);
 }
 function resetToStart() {
-  stopAudio(); state = 'pre'; songT = PRE_T; BS.resetLines(); P.x = 0; P.z = 12.6; P.yaw = 0; P.pitch = 0.03;
+  stopAudio(); state = 'pre'; songT = PRE_T; BS.resetLines(); ribbonsReset(); P.x = 0; P.z = 12.6; P.yaw = 0; P.pitch = 0.03;
   hint('Walk through the door to hear it again', 8);
 }
 
@@ -232,6 +362,7 @@ BS.liveFrame = frame;
 // ------------------------------------------------------------ modes
 function begin(mode) {
   dbg.mode = mode; ui.style.display = 'none'; started = true; if (state === 'idle') state = 'pre';
+  if (BS.playCeil) BS.playCeil();
   if (mode === 'flat' && isTouch) pads.style.display = 'block';
   last = performance.now();
   hint(mode === 'vr' ? 'Walk through the open door ahead' : 'Walk through the open door ahead  ·  W A S D or arrows, drag to look', 9);

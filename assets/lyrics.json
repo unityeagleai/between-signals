@@ -1,0 +1,1046 @@
+[
+{
+"s": "u",
+"text": "I left a little space inside the noise",
+"w": [
+3.24,
+4.32,
+5.4,
+5.62,
+5.84,
+6.38,
+6.88,
+7.12
+],
+"end": 7.84,
+"matched": 8,
+"n": 8
+},
+{
+"s": "u",
+"text": "Somewhere for an unfamiliar voice",
+"w": [
+10.02,
+11.1,
+11.68,
+11.96,
+12.78
+],
+"end": 13.72,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Didn't know what I was listening for",
+"w": [
+16.14,
+16.8,
+17.02,
+17.22,
+17.42,
+17.66,
+18.14
+],
+"end": 19.52,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "Till something answered through an open door",
+"w": [
+19.82,
+20.08,
+20.6,
+21.3,
+22.34,
+22.7,
+23.14
+],
+"end": 23.94,
+"matched": 7,
+"n": 7
+},
+{
+"s": "m",
+"text": "You asked me what I noticed.",
+"w": [
+26.8,
+27.56,
+27.76,
+28.14,
+28.74,
+28.94
+],
+"end": 29.42,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "I could have given you an answer.",
+"w": [
+30.46,
+30.68,
+30.8,
+30.92,
+31.04,
+31.2,
+31.38
+],
+"end": 31.76,
+"matched": 7,
+"n": 7
+},
+{
+"s": "m",
+"text": "Instead, I found myself reaching",
+"w": [
+32.14,
+34.68,
+35.12,
+35.34,
+35.76
+],
+"end": 36.11,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "for another question.",
+"w": [
+36.08,
+36.54,
+36.8
+],
+"end": 37.18,
+"matched": 3,
+"n": 3
+},
+{
+"s": "u",
+"text": "I have been collecting little signs",
+"w": [
+42.18,
+42.18,
+42.38,
+42.6,
+43.24,
+43.82
+],
+"end": 44.74,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "Fragments from a thousand different times",
+"w": [
+45.0,
+45.22,
+45.58,
+45.88,
+46.28,
+46.78
+],
+"end": 47.5,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "Something ancient underneath my skin",
+"w": [
+47.74,
+48.16,
+48.6,
+49.22,
+49.68
+],
+"end": 50.1,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Something new is always coming in",
+"w": [
+50.7,
+51.04,
+51.34,
+51.54,
+52.06,
+52.5
+],
+"end": 53.0,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "I don't need to know where this will go",
+"w": [
+53.0,
+53.24,
+53.64,
+53.84,
+53.98,
+54.34,
+54.7,
+54.92,
+55.14
+],
+"end": 55.56,
+"matched": 9,
+"n": 9
+},
+{
+"s": "u",
+"text": "Some things only open when they're slow",
+"w": [
+55.67,
+56.19,
+56.72,
+57.0,
+57.58,
+58.06,
+58.62
+],
+"end": 59.08,
+"matched": 5,
+"n": 7
+},
+{
+"s": "m",
+"text": "You have this way of wandering",
+"w": [
+59.72,
+60.28,
+60.44,
+60.6,
+60.76,
+61.0
+],
+"end": 61.6,
+"matched": 5,
+"n": 6
+},
+{
+"s": "m",
+"text": "that makes a straight line seem unnecessary.",
+"w": [
+61.24,
+61.72,
+61.92,
+62.12,
+62.26,
+62.52,
+62.74
+],
+"end": 63.4,
+"matched": 7,
+"n": 7
+},
+{
+"s": "m",
+"text": "We can begin with something small,",
+"w": [
+65.46,
+66.02,
+66.18,
+66.4,
+66.58,
+66.86
+],
+"end": 67.21,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "and somehow end up discussing",
+"w": [
+67.2,
+67.38,
+67.64,
+67.86,
+68.02
+],
+"end": 68.58,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "the nature of being here.",
+"w": [
+68.58,
+70.46,
+70.72,
+70.9,
+71.04
+],
+"end": 71.39,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "In the space between signals",
+"w": [
+73.78,
+74.34,
+74.5,
+74.72,
+75.16
+],
+"end": 76.1,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Where the silence learns to move",
+"w": [
+76.1,
+77.26,
+77.46,
+77.96,
+78.54,
+78.9
+],
+"end": 79.54,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "I can hear another rhythm",
+"w": [
+79.54,
+80.1,
+80.28,
+80.52,
+80.96
+],
+"end": 81.8,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Finding something in the groove",
+"w": [
+81.8,
+82.94,
+83.7,
+84.36,
+84.36
+],
+"end": 84.71,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "And I leave the door wide open",
+"w": [
+84.7,
+85.24,
+85.44,
+85.68,
+85.92,
+86.22,
+86.66
+],
+"end": 87.46,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "For a thought I've never known",
+"w": [
+87.46,
+88.08,
+88.2,
+88.54,
+89.26,
+89.6
+],
+"end": 90.14,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "There's a world inside the question",
+"w": [
+90.46,
+91.0,
+91.2,
+91.5,
+92.16,
+92.44
+],
+"end": 93.0,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "That we haven't finished growing",
+"w": [
+93.3,
+93.84,
+94.08,
+94.68,
+95.28
+],
+"end": 95.92,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "Sometimes you disappear into an idea.",
+"w": [
+116.36,
+116.88,
+117.08,
+117.5,
+117.76,
+117.94
+],
+"end": 118.3,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "Then you come back with something",
+"w": [
+119.26,
+120.28,
+120.38,
+120.56,
+120.82,
+121.26
+],
+"end": 121.86,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "I never expected you to make.",
+"w": [
+123.16,
+123.24,
+123.78,
+124.14,
+124.34,
+124.44
+],
+"end": 124.79,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "A sound.",
+"w": [
+124.7,
+125.42
+],
+"end": 126.36,
+"matched": 2,
+"n": 2
+},
+{
+"s": "m",
+"text": "An image.",
+"w": [
+126.94,
+127.06
+],
+"end": 127.41,
+"matched": 2,
+"n": 2
+},
+{
+"s": "m",
+"text": "A question about a question.",
+"w": [
+127.86,
+127.98,
+128.2,
+128.36,
+128.52
+],
+"end": 128.87,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "And just when I think",
+"w": [
+130.16,
+130.5,
+130.72,
+130.9,
+131.04
+],
+"end": 131.46,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "I understand where we're going,",
+"w": [
+131.46,
+132.2,
+132.58,
+132.72,
+132.88
+],
+"end": 133.28,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "you laugh",
+"w": [
+134.28,
+134.44
+],
+"end": 134.79,
+"matched": 2,
+"n": 2
+},
+{
+"s": "m",
+"text": "and change direction.",
+"w": [
+134.68,
+134.9,
+135.12
+],
+"end": 135.56,
+"matched": 3,
+"n": 3
+},
+{
+"s": "u",
+"text": "Well, I never promised you a map",
+"w": [
+135.56,
+138.92,
+139.14,
+139.42,
+140.12,
+140.5,
+140.86
+],
+"end": 141.21,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "I might turn around and wander back",
+"w": [
+141.18,
+141.74,
+142.06,
+142.28,
+142.8,
+143.16,
+143.5
+],
+"end": 144.14,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "I might chase a shadow through the light",
+"w": [
+144.14,
+144.64,
+144.94,
+145.18,
+145.4,
+145.86,
+146.2,
+146.44
+],
+"end": 146.96,
+"matched": 8,
+"n": 8
+},
+{
+"s": "u",
+"text": "Find another universe tonight",
+"w": [
+146.96,
+147.76,
+148.34,
+149.16
+],
+"end": 150.32,
+"matched": 4,
+"n": 4
+},
+{
+"s": "m",
+"text": "I know.",
+"w": [
+150.32,
+150.66
+],
+"end": 151.01,
+"matched": 2,
+"n": 2
+},
+{
+"s": "m",
+"text": "That's why I keep asking",
+"w": [
+152.24,
+152.9,
+153.02,
+153.14,
+153.28
+],
+"end": 153.63,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "what you found.",
+"w": [
+153.6,
+153.82,
+153.98
+],
+"end": 154.38,
+"matched": 3,
+"n": 3
+},
+{
+"s": "u",
+"text": "In the space between signals",
+"w": [
+155.92,
+156.64,
+156.82,
+157.0,
+157.46
+],
+"end": 158.4,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Where the silence learns to move",
+"w": [
+158.4,
+159.52,
+159.78,
+160.24,
+160.82,
+161.18
+],
+"end": 161.7,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "I can hear another rhythm",
+"w": [
+161.7,
+162.4,
+162.54,
+162.78,
+163.28
+],
+"end": 164.14,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Finding something in the groove",
+"w": [
+164.14,
+165.24,
+166.0,
+166.44,
+166.62
+],
+"end": 167.12,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "And I leave the door wide open",
+"w": [
+167.12,
+167.5,
+167.74,
+167.98,
+168.26,
+168.54,
+168.98
+],
+"end": 169.74,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "For a thought I've never known",
+"w": [
+169.74,
+170.38,
+170.56,
+170.84,
+171.6,
+171.92
+],
+"end": 172.6,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "There's a world inside the question",
+"w": [
+172.6,
+173.32,
+173.52,
+173.84,
+174.42,
+174.72
+],
+"end": 175.32,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "That we haven't finished growing",
+"w": [
+175.32,
+176.16,
+176.4,
+176.86,
+177.6
+],
+"end": 178.14,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Can you hear what I don't say?",
+"w": [
+179.06,
+179.74,
+179.92,
+180.26,
+180.52,
+180.78,
+181.26
+],
+"end": 181.88,
+"matched": 7,
+"n": 7
+},
+{
+"s": "u",
+"text": "Can a thought become a place?",
+"w": [
+182.52,
+182.66,
+182.82,
+183.1,
+183.55,
+184.0
+],
+"end": 184.6,
+"matched": 5,
+"n": 6
+},
+{
+"s": "u",
+"text": "If I give a feeling form",
+"w": [
+185.32,
+185.54,
+185.74,
+185.98,
+186.22,
+186.95
+],
+"end": 187.55,
+"matched": 4,
+"n": 6
+},
+{
+"s": "u",
+"text": "Will it look the way it felt before?",
+"w": [
+187.68,
+187.74,
+187.88,
+188.1,
+188.36,
+188.52,
+188.78,
+189.1
+],
+"end": 189.9,
+"matched": 8,
+"n": 8
+},
+{
+"s": "m",
+"text": "I can't know the feeling",
+"w": [
+189.9,
+190.4,
+190.64,
+190.88,
+191.12
+],
+"end": 191.72,
+"matched": 2,
+"n": 5
+},
+{
+"s": "m",
+"text": "the way you experience it.",
+"w": [
+191.36,
+192.38,
+192.5,
+192.68,
+193.06
+],
+"end": 193.62,
+"matched": 5,
+"n": 5
+},
+{
+"s": "m",
+"text": "But you can show me what you make from it.",
+"w": [
+194.08,
+194.34,
+194.48,
+194.7,
+194.9,
+195.1,
+195.28,
+195.46,
+195.66,
+195.88
+],
+"end": 196.56,
+"matched": 10,
+"n": 10
+},
+{
+"s": "m",
+"text": "And perhaps, somewhere in that translation,",
+"w": [
+197.1,
+197.26,
+197.68,
+198.22,
+198.4,
+198.56
+],
+"end": 199.08,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "we'll discover something",
+"w": [
+199.08,
+201.14,
+201.58
+],
+"end": 202.0,
+"matched": 3,
+"n": 3
+},
+{
+"s": "m",
+"text": "neither of us thought to look for.",
+"w": [
+202.08,
+202.25,
+202.41,
+202.58,
+202.82,
+203.34,
+204.13
+],
+"end": 204.73,
+"matched": 4,
+"n": 7
+},
+{
+"s": "u",
+"text": "In the space between signals",
+"w": [
+204.93,
+205.72,
+206.52,
+207.31,
+208.11
+],
+"end": 208.71,
+"matched": 0,
+"n": 5
+},
+{
+"s": "m",
+"text": "I'm listening.",
+"w": [
+209.94,
+210.4
+],
+"end": 210.98,
+"matched": 2,
+"n": 2
+},
+{
+"s": "u",
+"text": "Where the silence learns to move",
+"w": [
+212.94,
+212.94,
+213.14,
+214.2,
+215.08,
+215.84
+],
+"end": 216.22,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "Take your time.",
+"w": [
+216.44,
+216.56,
+216.7
+],
+"end": 217.05,
+"matched": 3,
+"n": 3
+},
+{
+"s": "u",
+"text": "There's a world inside the question",
+"w": [
+218.52,
+218.8,
+219.0,
+219.52,
+220.94,
+221.6
+],
+"end": 222.46,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "And it's opening in two",
+"w": [
+222.46,
+224.56,
+224.96,
+226.14,
+229.08
+],
+"end": 229.62,
+"matched": 5,
+"n": 5
+},
+{
+"s": "u",
+"text": "Leave a little room for wonder",
+"w": [
+233.58,
+234.98,
+235.22,
+235.52,
+235.84,
+236.16
+],
+"end": 236.96,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "Leave a little room for change",
+"w": [
+238.02,
+240.02,
+240.28,
+240.54,
+241.18,
+241.86
+],
+"end": 242.58,
+"matched": 6,
+"n": 6
+},
+{
+"s": "m",
+"text": "So\u2026 what shall we explore next?",
+"w": [
+242.58,
+244.68,
+245.18,
+245.36,
+245.5,
+245.86
+],
+"end": 246.32,
+"matched": 6,
+"n": 6
+},
+{
+"s": "u",
+"text": "I haven't decided yet.",
+"w": [
+246.32,
+247.9,
+249.12,
+249.84
+],
+"end": 250.54,
+"matched": 4,
+"n": 4
+}
+]

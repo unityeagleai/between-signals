@@ -64,7 +64,9 @@ const U = BS.U = {
   uBlob: { value: [new THREE.Vector4(0, 0, 0, 0), new THREE.Vector4(0, 0, 0, 0), new THREE.Vector4(0, 0, 0, 0)] },
   uLineHead: { value: new THREE.Vector4(0, -50, 0, 0) }, uDoorW: { value: 0.2 }, uImg: { value: null },
   uFeat: { value: null }, uFeatN: { value: 1 }, uFeatRows: { value: 1 }, uPlayer: { value: new THREE.Vector3() }, uWalk: { value: 0 },
-  uSig: { value: 0 }   // live only: the living room (gold music symbols on dark teal). Always 0 in render mode, so the video is unchanged
+  uSig: { value: 0 },  // live only: the living room (gold music symbols on dark teal). Always 0 in render mode, so the video is unchanged
+  // v3 (live only, all 0/null in render mode): weathered concrete, the constellation ceiling (video) and the light it sheds
+  uCon: { value: 0 }, uConT: { value: null }, uVid: { value: null }, uCeil: { value: 0 }
 };
 const GL = `
 float h21(vec2 p){ p = fract(p*vec2(123.34,456.21)); p += dot(p, p+45.32); return fract(p.x*p.y); }
@@ -80,6 +82,22 @@ const vec3 VERD = vec3(0.26, 0.62, 0.52);
 const vec3 TEAL = vec3(0.05, 0.22, 0.24);
 const vec3 GOLDG = vec3(1.0, 0.74, 0.32);
 const vec3 DTEAL = vec3(0.010, 0.085, 0.090);
+// v3: the constellation ceiling, a 56 x 31.5 m video plane 11 m up (top of the picture over the entrance, like the approved preview)
+const float CEIL_Y = 11.0;
+const vec4 CEILR = vec4(0.0, -12.25, 28.0, 15.75);
+vec3 ceilAt(vec2 xz){
+  vec2 u = vec2((xz.x - CEILR.x) / (2.0*CEILR.z) + 0.5, (xz.y - CEILR.y) / (2.0*CEILR.w) + 0.5);
+  if (u.x < 0.0 || u.x > 1.0 || u.y < 0.0 || u.y > 1.0) return vec3(0.0);
+  vec3 c = texture2D(uVid, u).rgb;
+  c = clamp((c - 0.075) / 0.925, 0.0, 1.0);
+  float l = max(c.r, max(c.g, c.b));
+  float gk = clamp(l * 2.2, 0.0, 1.0);
+  vec3 ramp = vec3(0.05, 0.36, 0.38) * 1.6 * (1.0 - gk) + vec3(1.0, 0.80, 0.42) * gk;   // teal to gold, exactly the preview's grade
+  vec3 d = min(ramp * pow(l, 0.9) * 2.6, vec3(1.0));          // in display terms...
+  vec3 x = min(pow(d, vec3(2.2)), vec3(0.95));
+  float vig = smoothstep(0.0, 0.2, min(u.x, 1.0 - u.x)) * smoothstep(0.0, 0.14, min(u.y, 1.0 - u.y));
+  return -log(1.0 - x) * (vig / 1.2);                         // ...undone through this world's tone curve so it lands the same
+}
 // light falling on a surface: her blooms (warm), the doorway's glow, the head of his line (bronze), a little cold ambient
 vec3 lightAt(vec3 wp, vec3 n){
   vec3 c = vec3(0.004, 0.009, 0.010) * uAmb;
@@ -88,12 +106,14 @@ vec3 lightAt(vec3 wp, vec3 n){
   for (int i=0;i<3;i++){ vec3 bl = uBlob[i].xyz - wp; float d2 = dot(bl,bl); float d = sqrt(d2);
     c += WARM2 * uBlob[i].w * (0.3 + 0.7*max(dot(n, bl/d), 0.0)) * 0.7 / (1.0 + d2*0.7); }
   vec3 ll = uLineHead.xyz - wp; c += BRONZE * uLineHead.w / (1.0 + dot(ll,ll)*2.0);
+  c += vec3(0.012, 0.040, 0.042) * uCeil * (0.7 * smoothstep(0.5, 7.2, wp.y) + 0.3 * max(n.y, 0.0));   // v3: soft light from the constellation overhead
   return c;
 }
 float fogF(float dist){ return 1.0 - exp(-uFogD*uFogD*dist*dist); }
 `;
 const VH = `uniform float uT, uTime, uRms, uSub, uHi, uHer, uHis, uTrip, uReveal, uDark, uSplit, uPatina, uDoorGlow, uAmb, uFogD, uDoorW, uFeatN, uFeatRows, uWalk, uSig;
 uniform vec3 uFogC, uPlayer; uniform vec4 uBlob[3]; uniform vec4 uLineHead; uniform sampler2D uImg; uniform sampler2D uFeat;
+uniform float uCon, uCeil; uniform sampler2D uConT, uVid;
 varying vec3 vWp; varying vec3 vN; varying vec2 vUv; varying float vDist;
 `;
 function mat(o) {
@@ -199,20 +219,49 @@ float symLayer(vec2 q, float dir){
 // stone: ashlar blocks, mineral streaks; verdigris where water and time got in; her image when the room turns out to be her light
 const STONE = SYMS + `
 uniform float uKind; // 0 wall, 1 ceiling, 2 pillar
+uniform float uConc; // v3: 1 = weathered concrete (live hall), 0 = the old ashlar stone (render mode, and the dark antechamber)
 vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
   vec2 q = abs(n.x) > 0.5 ? wp.zy : (abs(n.z) > 0.5 ? wp.xy : wp.xz);
   if (uKind > 1.5) q = vec2(atan(wp.x - floor(wp.x/8.4+0.5)*8.4, 1.0)*0.0 + uv.x*3.2, wp.y);
   vec2 w = q;
   if (uTrip > 0.001) { float a = uTime*0.25; w += uTrip * 0.9 * vec2(fbm3(q*0.35 + a), fbm3(q*0.35 - a + 3.1)); }
   if (uSig > 0.001) w += uSig * vec2(0.10 * sin(q.y * 1.3 + uTime * 0.45), 0.22 * (noise(q * 0.4 + vec2(0.0, uTime * 0.05)) - 0.5));  // the stone slowly melts
-  vec2 bq = vec2(w.x * 0.62, w.y * 1.15); float row = floor(bq.y); bq.x += mod(row, 2.0) * 0.5;
-  vec2 cell = fract(bq), id = floor(bq);
-  float mortar = smoothstep(0.0, 0.035, min(min(cell.x, 1.0-cell.x)*0.6, min(cell.y, 1.0-cell.y)));
-  float nse = fbm3(w * 1.7 + id * 3.1);
-  vec3 alb = mix(vec3(0.030, 0.040, 0.040), vec3(0.085, 0.090, 0.080), nse) * (0.55 + 0.45*mortar) * (0.85 + 0.3*h21(id));
-  float streak = smoothstep(0.62, 0.9, fbm3(vec2(w.x*2.2, w.y*0.25) + 4.0)) * smoothstep(3.5, 0.0, wp.y);
-  alb = mix(alb, VERD * 0.22, streak * 0.6);
+  float cc = uConc * uCon;
+  vec3 alb; float mortar = 1.0, wet = 0.0, gold = 0.0, band = 0.0;
+  if (cc > 0.5) {
+    // weathered board-formed concrete: 1.2 m panels, tie holes, rain runs, pores, hairline cracks (tileable texture, 2.4 m)
+    vec2 cq = uKind > 1.5 ? vec2(uv.x * 2.4 + (w.x - q.x), w.y) : w;
+    vec4 ct = texture2D(uConT, vec2(cq.x, -cq.y) * (1.0 / 2.4));
+    alb = mix(vec3(0.012, 0.019, 0.021), vec3(0.080, 0.088, 0.084), ct.r);
+    alb *= 0.72 + 0.56 * noise(w * 0.11 + 7.0);
+    wet = ct.g; gold = ct.b;
+    alb *= 1.0 - 0.4 * wet;
+    alb = mix(alb, VERD * 0.16, wet * smoothstep(4.2, 0.2, wp.y) * 0.75);
+    if (uKind > 1.5) {   // weathered bronze collars on the pillars, verdigris eating into them
+      band = max(smoothstep(0.2, 0.17, abs(wp.y - 0.45)), smoothstep(0.16, 0.13, abs(wp.y - 6.55)));
+      float pv = smoothstep(0.35, 0.75, noise(cq * vec2(3.0, 6.0)) + 0.25 * noise(cq * 31.0));
+      alb = mix(alb, mix(vec3(0.24, 0.15, 0.07), vec3(0.11, 0.32, 0.27), pv), band);
+    }
+  } else {
+    vec2 bq = vec2(w.x * 0.62, w.y * 1.15); float row = floor(bq.y); bq.x += mod(row, 2.0) * 0.5;
+    vec2 cell = fract(bq), id = floor(bq);
+    mortar = smoothstep(0.0, 0.035, min(min(cell.x, 1.0-cell.x)*0.6, min(cell.y, 1.0-cell.y)));
+    float nse = fbm3(w * 1.7 + id * 3.1);
+    alb = mix(vec3(0.030, 0.040, 0.040), vec3(0.085, 0.090, 0.080), nse) * (0.55 + 0.45*mortar) * (0.85 + 0.3*h21(id));
+    float streak = smoothstep(0.62, 0.9, fbm3(vec2(w.x*2.2, w.y*0.25) + 4.0)) * smoothstep(3.5, 0.0, wp.y);
+    alb = mix(alb, VERD * 0.22, streak * 0.6);
+  }
   vec3 col = alb * lightAt(wp, n) * 2.4;
+  if (cc > 0.5) {
+    // gold reflections here and there: damp patches and the bronze collars catch the warm lights; a little gold in some cracks
+    vec3 V = normalize(cameraPosition - wp); vec3 R = reflect(-V, n);
+    float gl = 0.15 + 0.85 * max(wet, band);
+    vec3 dl = normalize(vec3(0.0, 2.6, -21.6) - wp);
+    col += GOLDG * pow(max(dot(R, dl), 0.0), 12.0) * uDoorGlow * gl * 0.3;
+    for (int i=0;i<3;i++){ vec3 bl = normalize(uBlob[i].xyz - wp); col += GOLDG * pow(max(dot(R, bl), 0.0), 18.0) * uBlob[i].w * gl * 0.35; }
+    col += GOLDG * pow(max(R.y, 0.0), 6.0) * uCeil * gl * 0.05;
+    col += GOLDG * gold * (0.03 + 0.3 * uRms + 0.12 * uHer) * (1.0 - uDark * 0.6);
+  }
   if (uTrip > 0.001) {
     float bands = sin(fbm3(w*0.6 + uTime*0.12)*9.0 + uTime*0.7 + wp.y*0.6);
     vec3 tc = mix(mix(TEAL*1.6, VERD, 0.5+0.5*bands), BRONZE*0.9, smoothstep(0.55, 1.0, bands));
@@ -252,7 +301,7 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
   }
   return col;
 }`;
-const stoneMat = k => mat({ uniforms: { uKind: { value: k } }, frag: STONE, disp: BREATHE });
+const stoneMat = (k, conc) => mat({ uniforms: { uKind: { value: k }, uConc: { value: conc === undefined ? 1 : conc } }, frag: STONE, disp: BREATHE });
 // bronze: oxidized, warm where light is, verdigris blooms over it across the first verse
 const BRONZE_FRAG = `
 vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
@@ -301,6 +350,7 @@ vec3 shade(vec3 wp, vec3 n0, vec2 uv, inout float alpha){
     float dw = smoothstep(uDoorW + 0.15, uDoorW - 0.05, abs(hp.x)) * smoothstep(5.8, 4.8, hp.y) * step(0.0, hp.y);
     col += WARM * dw * uDoorGlow * 1.6 * fr * 3.0;
   }
+  if (uCon > 0.5 && R.y > 0.05) { float tc = (CEIL_Y - wp.y) / R.y; col += ceilAt(wp.xz + R.xz * tc) * fr * 1.4; }   // v3: the constellation in the water
   for (int i=0;i<3;i++){ vec3 bl = uBlob[i].xyz - wp; float d = length(bl);
     col += WARM2 * pow(max(dot(R, bl / d), 0.0), 60.0) * uBlob[i].w * 2.5 / (1.0 + d*0.15);
     col += WARM2 * uBlob[i].w * 0.12 / (1.0 + d*d*0.8); }
@@ -329,8 +379,9 @@ function box(w, h, d, m, x, y, z, seg, parent) {
 // long walls (segmented so they can breathe), ceiling halves, far wall halves around the door
 box(0.6, HY, HZ0 - HZ1, wallMat, -HX - 0.3, HY / 2, (HZ0 + HZ1) / 2, [1, 8, 18], halfL);
 box(0.6, HY, HZ0 - HZ1, wallMat, HX + 0.3, HY / 2, (HZ0 + HZ1) / 2, [1, 8, 18], halfR);
-box(HX, 0.5, HZ0 - HZ1, ceilMat, -HX / 2, HY + 0.25, (HZ0 + HZ1) / 2, [4, 1, 16], halfL);
-box(HX, 0.5, HZ0 - HZ1, ceilMat, HX / 2, HY + 0.25, (HZ0 + HZ1) / 2, [4, 1, 16], halfR);
+const ceilL = box(HX, 0.5, HZ0 - HZ1, ceilMat, -HX / 2, HY + 0.25, (HZ0 + HZ1) / 2, [4, 1, 16], halfL);
+const ceilR = box(HX, 0.5, HZ0 - HZ1, ceilMat, HX / 2, HY + 0.25, (HZ0 + HZ1) / 2, [4, 1, 16], halfR);
+if (!RENDER) { ceilL.visible = ceilR.visible = false; }   // v3: the hall is open to the constellation ceiling
 for (const s of [-1, 1]) {
   const parent = s < 0 ? halfL : halfR, wpart = HX - DOORW;
   box(wpart, HY, 0.8, wallMat, s * (DOORW + wpart / 2), HY / 2, HZ1 - 0.4, [4, 6, 1], parent);
@@ -351,10 +402,11 @@ for (const s of [-1, 1]) {
 // the antechamber you start in, and the wall with the entrance door
 const ante = new THREE.Group(); scene.add(ante);
 const AW = 2.6, AZ1 = 14.2, AH = 3.6, EW = 0.75, EH = 2.7;
-box(0.4, AH, AZ1 - HZ0, wallMat, -AW - 0.2, AH / 2, (AZ1 + HZ0) / 2, null, ante);
-box(0.4, AH, AZ1 - HZ0, wallMat, AW + 0.2, AH / 2, (AZ1 + HZ0) / 2, null, ante);
-box(AW * 2 + 0.8, AH, 0.4, wallMat, 0, AH / 2, AZ1 + 0.2, null, ante);
-box(AW * 2 + 0.8, 0.4, AZ1 - HZ0, ceilMat, 0, AH + 0.2, (AZ1 + HZ0) / 2, null, ante);
+const anteWall = stoneMat(0, 0), anteCeil = stoneMat(1, 0);   // v3: the dark antechamber stays ashlar stone; the hall beyond is concrete
+box(0.4, AH, AZ1 - HZ0, anteWall, -AW - 0.2, AH / 2, (AZ1 + HZ0) / 2, null, ante);
+box(0.4, AH, AZ1 - HZ0, anteWall, AW + 0.2, AH / 2, (AZ1 + HZ0) / 2, null, ante);
+box(AW * 2 + 0.8, AH, 0.4, anteWall, 0, AH / 2, AZ1 + 0.2, null, ante);
+box(AW * 2 + 0.8, 0.4, AZ1 - HZ0, anteCeil, 0, AH + 0.2, (AZ1 + HZ0) / 2, null, ante);
 box(AW * 2 + 0.8, 0.3, AZ1 - HZ0, mat({ frag: STONE.replace('uniform float uKind;', 'float uKind = 1.0;') }), 0, -0.15, (AZ1 + HZ0) / 2, null, ante);
 for (const s of [-1, 1]) box(HX - EW, HY, 0.8, wallMat, s * (EW + (HX - EW) / 2), HY / 2, HZ0 + 0.4, [3, 6, 1], ante);
 box(EW * 2, HY - EH, 0.8, wallMat, 0, EH + (HY - EH) / 2, HZ0 + 0.4, null, ante);
@@ -388,6 +440,43 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
 }` });
 panel.add(new THREE.Mesh(new THREE.PlaneGeometry(7.2, 7.2), panelMat));
 for (const [w, h, x, y] of [[7.8, 0.3, 0, 3.75], [7.8, 0.3, 0, -3.75], [0.3, 7.8, 3.75, 0], [0.3, 7.8, -3.75, 0]]) box(w, h, 0.25, brMat, x, y, -0.05, null, panel);
+
+// ------------------------------------------------------------ v3 (live only): the approved concept look
+// The constellation (Unity and Miles's shared brain) plays as a huge ceiling 11 m up, the hall is open to it, the water
+// reflects it. Unity and Miles (still cutout, its own layer) hang under its far edge in front of it, at the end of the hall.
+let ceilMesh = null, peopleMesh = null;
+if (!RENDER) {
+  panel.visible = false;   // her old picture is replaced by the new layers
+  const cTex = new THREE.TextureLoader().load(BS.asset('img/concrete.jpg'));
+  cTex.wrapS = cTex.wrapT = THREE.RepeatWrapping; cTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  U.uConT.value = cTex; U.uCon.value = 1;
+  const v = document.createElement('video');
+  v.muted = true; v.loop = true; v.playsInline = true; v.setAttribute('playsinline', ''); v.setAttribute('muted', ''); v.crossOrigin = 'anonymous'; v.preload = 'auto';
+  const mp4 = v.canPlayType('video/mp4; codecs="avc1.4D4028"');   // Quest browser: H.264. Builds without it get the VP9 copy
+  v.src = BS.asset(mp4 ? 'video/constellation.mp4' : 'video/constellation.webm'); BS.ceilSrc = mp4 ? 'mp4' : 'webm';
+  BS.ceilVideo = v; BS.playCeil = () => { if (v.paused) v.play().catch(() => {}); };
+  v.addEventListener('canplay', () => BS.playCeil(), { once: true });
+  const vTex = new THREE.VideoTexture(v); vTex.minFilter = THREE.LinearFilter; vTex.magFilter = THREE.LinearFilter; vTex.generateMipmaps = false;
+  U.uVid.value = vTex;
+  ceilMesh = new THREE.Mesh(new THREE.PlaneGeometry(56, 31.5), mat({ noFog: true, frag: `
+vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
+  return ceilAt(wp.xz) * (0.8 + 0.35 * uRms + 0.2 * uSplit) * (1.0 - 0.45 * uDark) + DTEAL * 0.015;
+}` }));
+  ceilMesh.rotation.x = Math.PI / 2; ceilMesh.position.set(0, 11.0, -12.25); scene.add(ceilMesh);
+  const pTex = new THREE.TextureLoader().load(BS.asset('img/people.webp'));
+  pTex.anisotropy = Math.min(4, renderer.capabilities.getMaxAnisotropy());
+  peopleMesh = new THREE.Mesh(new THREE.PlaneGeometry(10.6, 5.96), mat({ noFog: true, transparent: true, depthWrite: false, uniforms: { uPeo: { value: pTex } }, frag: `
+uniform sampler2D uPeo;
+vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
+  vec4 p = texture2D(uPeo, uv);
+  alpha = p.a;
+  vec3 c = pow(p.rgb, vec3(2.2)) * (0.95 + 0.2 * uHer + 0.15 * uRms + 0.3 * uSplit) * (1.0 - 0.35 * uDark);
+  return c + DTEAL * 0.04 * p.a;
+}` }));
+  peopleMesh.position.set(0, 6.6, -15.0); peopleMesh.renderOrder = 2; scene.add(peopleMesh);
+  U.uImg.value = vTex;
+  BS.ceilMesh = ceilMesh; BS.peopleMesh = peopleMesh;   // "can a thought become a place?": the walls turn out to be the shared brain
+}
 // light falling through the gaps: one beam from the far door, one through the entrance into the dark antechamber
 const BEAM = `
 uniform float uBeam, uLenB;
@@ -883,6 +972,7 @@ BS.update = function (t, clock) {
   const split = sm((t - S.opening) / (S.two + 1.5 - S.opening));
   U.uSig.value = RENDER ? 0 : (t >= 0 && t < S.END + 0.5 ? up(t, 0, 6) : 0) * (1 - 0.55 * bridgeDark);
   if (floatSyms) floatSyms.visible = U.uSig.value > 0.002;
+  if (!RENDER) U.uCeil.value = (0.75 + 0.6 * U.uRms.value) * (1 - 0.5 * bridgeDark) + 0.25 * split;
   U.uTrip.value = trip; U.uReveal.value = reveal * (1 - 0.45 * up(t, S.fch, 3)); U.uDark.value = bridgeDark; U.uSplit.value = split;
   U.uPatina.value = sm((t - S.v1 + 0.5) / 14.0) * (1 - 0.0);
   // ---- the far door: ajar, a fraction wider on "slow", wide on the choruses, gone when the room opens
