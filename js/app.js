@@ -82,7 +82,7 @@ function startAudio() {
   dbg.audio = 'playing';
 }
 // headless tests only (?test): jump the song to a time to photograph a section
-if (BS.QS && BS.QS.has('test')) BS.testSeek = t => { if (audioOK) song.currentTime = t; };
+if (BS.QS && BS.QS.has('test')) BS.testSeek = t => { if (audioOK) song.currentTime = t; clock0 = performance.now() / 1000 - t; };
 if (BS.QS && BS.QS.has('test')) BS.testPose = (x, z, yaw, pitch) => { P.x = x; P.z = z; P.yaw = yaw; P.pitch = pitch; };
 function stopAudio() { if (audioOK) song.pause(); }
 // the song's clock: the audio element is the master. Visuals ease to it and never push it.

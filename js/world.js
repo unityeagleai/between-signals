@@ -689,13 +689,22 @@ const dancers = [];
 function dancer(seed, mode, w, h, parent) {
   // render mode (the music video) keeps the original figures; live mode gets the human silhouettes on wider cards
   if (!RENDER) w *= mode === 0 ? 3.4 / 2.6 : 1.9 / 1.5;
-  const m = mat({ frag: RENDER ? DANCER : DANCER2, transparent: true, depthWrite: false, uniforms: { uSeed: { value: seed }, uMode: { value: mode }, uVis: { value: 0 }, uAspX: { value: RENDER ? 1 : (mode === 0 ? 3.4 / 2.6 : 1.9 / 1.5) } } });
-  const me = new THREE.Mesh(new THREE.PlaneGeometry(w, h), m); me.renderOrder = 2; (parent || scene).add(me); dancers.push(me); return me;
+  // v5 (live, wall dancers): the card rides the breathing wall (same displacement as the stone and the bronze panels, on a finer grid),
+  // so the wall can never swell through a dancer and swallow part of it; a small polygon offset keeps it ahead of the wall in depth.
+  const ride = !RENDER && mode === 0;
+  const m = mat({ frag: RENDER ? DANCER : DANCER2, transparent: true, depthWrite: false, disp: ride ? BREATHE : '', uniforms: { uSeed: { value: seed }, uMode: { value: mode }, uVis: { value: 0 }, uAspX: { value: RENDER ? 1 : (mode === 0 ? 3.4 / 2.6 : 1.9 / 1.5) } } });
+  if (ride) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -4; }
+  const me = new THREE.Mesh(ride ? new THREE.PlaneGeometry(w, h, 12, 16) : new THREE.PlaneGeometry(w, h), m); me.renderOrder = 2; (parent || scene).add(me); dancers.push(me); return me;
 }
 // wall shadows (left wall faces +x, right wall faces -x)
 const wallD = [];
-for (const [s, z, seed] of [[-1, 0.8, 1], [-1, -5.4, 2], [-1, -11.8, 3], [1, -1.0, 4], [1, -7.4, 5], [1, -13.6, 6], [1, -18.5, 7]]) {
-  const d = dancer(seed, 0, 2.6, 4.8, s < 0 ? halfL : halfR); d.position.set(s * (HX - 0.12), 2.4, z); d.rotation.y = -s * Math.PI / 2; d.userData.base = z; wallD.push(d);
+// v5 (live only): the dancers stood right in front of the bronze panels (z 0, -6.3, -12.5; 4.2 m long, 2.9 m tall), so each figure
+// was framed by a tan box, and the breathing panel face (up to 8 cm, more in the guitar break) came through the 4 cm gap and hid
+// parts of the figure. In live mode they stand on bare wall between the panels, 0.28 m off the wall, riding its breathing.
+const WALL_D = RENDER ? [[-1, 0.8, 1], [-1, -5.4, 2], [-1, -11.8, 3], [1, -1.0, 4], [1, -7.4, 5], [1, -13.6, 6], [1, -18.5, 7]]
+                      : [[-1, 5.0, 1], [-1, -3.15, 2], [-1, -18.4, 3], [1, 4.0, 4], [1, -9.4, 5], [1, -16.6, 6], [1, -19.6, 7]];
+for (const [s, z, seed] of WALL_D) {
+  const d = dancer(seed, 0, 2.6, 4.8, s < 0 ? halfL : halfR); d.position.set(s * (HX - (RENDER ? 0.12 : 0.28)), 2.4, z); d.rotation.y = -s * Math.PI / 2; d.userData.base = z; wallD.push(d);
 }
 // backlit pair in front of her picture
 const backD = [dancer(10, 1, 1.5, 2.76), dancer(11, 1, 1.5, 2.76)];
