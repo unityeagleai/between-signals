@@ -662,9 +662,12 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
     for (int k = 1; k < 3; k++) { float fk = float(k); vec2 q = p; q.x = abs(q.x) - 0.3*fk*uTrip;
       d = min(d, human(q, ph - 0.15*fk, en, st, fem, dress) + 0.015*fk); }
   }
-  float m = smoothstep(0.01, -0.01, d);
+  // v4 (Oct 15): nothing of the card may show away from the figure. Some GPUs drew the whole card as a dark box: discard every
+  // pixel more than a hair outside the silhouette (also catches NaN), and use smoothstep with ordered edges (reversed is undefined).
+  if (!(d < 0.075)) discard;
+  float m = 1.0 - smoothstep(-0.01, 0.01, d);
   float rim = exp(-abs(d) * 60.0);
-  float deep = smoothstep(0.0, -0.07, d);
+  float deep = 1.0 - smoothstep(-0.07, 0.0, d);
   float smoke = noise(p * vec2(5.0, 3.5) + vec2(uSeed * 3.1, -uTime * 0.5));
   float e = 0.45 + 0.9 * uRms + 0.3 * uSub;
   vec3 L = lightAt(wp, n); float lit = clamp(dot(L, vec3(0.35)) * 2.2, 0.0, 1.0);
@@ -673,11 +676,13 @@ vec3 shade(vec3 wp, vec3 n, vec2 uv, inout float alpha){
     vec3 body = mix(DTEAL * 2.2, TEAL * 0.9, smoke) * (0.5 + 0.5 * deep) * (0.55 + 0.45 * e);
     vec3 c = body + GOLDG * rim * (0.45 + 0.75 * e) * (0.7 + 0.3 * lit);
     alpha = uVis * clamp(m * (0.30 + 0.22 * smoke + 0.15 * lit) + rim * 0.6, 0.0, 0.8);
+    if (alpha < 0.004) discard;
     return c;
   }
   // backlit against her picture: smoky dark body, warm gold rim, her picture shows through
   vec3 c = mix(vec3(0.006, 0.02, 0.022), DTEAL * 1.5, smoke * 0.6) + WARM * rim * (0.6 + 0.8 * uHer);
   alpha = uVis * clamp(m * (0.5 + 0.2 * smoke) + rim * 0.85, 0.0, 0.9);
+  if (alpha < 0.004) discard;
   return c;
 }`;
 const dancers = [];

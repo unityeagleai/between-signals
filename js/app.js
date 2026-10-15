@@ -150,14 +150,18 @@ void main(){
 }`;
 const RIB_FS = `uniform sampler2D uTex; uniform float uWx[${RB_NW}], uWa[${RB_NW}]; uniform float uFade, uStaff, uK, uRms;
 varying vec2 vUv;
+// v4 (Oct 15): crisp gold letters with a THIN dark edge instead of the wide glow, so the words stay readable over the very
+// bright screen at the end. Colour still adds light (as before); alpha darkens what is behind the letters and their thin edge
+// (blend: ONE, ONE_MINUS_SRC_ALPHA). R = letters, G = thin edge mask (letters dilated a few px), B = staff lines.
 void main(){
   vec4 tx = texture2D(uTex, vUv);
   float a = 0.0;
   for (int i = 0; i < ${RB_NW}; i++) { if (vUv.x >= uWx[i]) a = uWa[i]; }
-  vec3 core = mix(vec3(1.0, 0.93, 0.74), vec3(0.98, 0.88, 0.72), uK);
+  vec3 core = mix(vec3(1.0, 0.86, 0.52), vec3(0.98, 0.83, 0.56), uK);
   vec3 gold = mix(vec3(1.0, 0.72, 0.30), vec3(0.92, 0.64, 0.36), uK);
-  vec3 col = core * tx.r * a * 0.95 + gold * tx.g * a * 0.75 + gold * tx.b * uStaff * (0.22 + 0.35 * uRms);
-  gl_FragColor = vec4(col * uFade, 1.0);
+  vec3 col = core * tx.r * a + gold * tx.g * a * 0.08 + gold * tx.b * uStaff * (0.22 + 0.35 * uRms);
+  float dark = max(tx.g * 0.8, tx.r * 0.92) * a;
+  gl_FragColor = vec4(col * uFade, dark * uFade);
 }`;
 const ribbons = [];
 for (let i = 0; i < 4; i++) {
@@ -167,7 +171,8 @@ for (let i = 0; i < 4; i++) {
   const uni = { uTex: { value: tex }, uTime: { value: 0 }, uAmp: { value: 0.03 }, uW: { value: 1 }, uH: { value: RB_H * RB_PX }, uR: { value: RB_R }, uLam: { value: 2.3 },
     uWx: { value: new Array(RB_NW).fill(2) }, uWa: { value: new Array(RB_NW).fill(0) }, uFade: { value: 0 }, uStaff: { value: 0 }, uK: { value: 0 }, uRms: { value: 0 } };
   const m = new THREE.Mesh(new THREE.PlaneGeometry(1, 1, 128, 1), new THREE.ShaderMaterial({ uniforms: uni, vertexShader: RIB_VS, fragmentShader: RIB_FS,
-    transparent: true, depthWrite: false, depthTest: true, blending: THREE.AdditiveBlending, side: THREE.DoubleSide }));
+    transparent: true, depthWrite: false, depthTest: true, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation,
+    blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor, side: THREE.DoubleSide }));
   m.frustumCulled = false; m.renderOrder = 50; m.visible = false; scene.add(m);
   ribbons.push({ cv: cv2, cx: cv2.getContext('2d'), tex, uni, m, li: -1, wx: [], born: 0, dying: -1, ax: 0, az: 0, ay: 0, yaw: 0, lift: 0 });
 }
@@ -184,9 +189,10 @@ function drawRibbon(r, L) {
   const x0 = (RB_W - tw) / 2, base = RB_H / 2 + fs * 0.33;
   const xs = []; let x = x0; for (let i = 0; i < words.length; i++) { xs.push(x); x += ws[i] + sp; }
   c.globalCompositeOperation = 'lighter'; c.textBaseline = 'alphabetic';
-  // G: soft glow (shadow only: the text itself is drawn far off the canvas)
-  c.save(); c.shadowColor = 'rgb(0,255,0)'; c.shadowBlur = 22; c.shadowOffsetX = 10000; c.fillStyle = 'rgb(0,255,0)';
-  words.forEach((w, i) => c.fillText(w, xs[i] - 10000, base)); c.restore();
+  // G: thin edge mask, the letters grown by a few px and barely softened (v4: was a 22 px glow that bloomed into a blob on bright light)
+  c.save(); c.shadowColor = 'rgb(0,255,0)'; c.shadowBlur = 3; c.shadowOffsetX = 10000; c.fillStyle = 'rgb(0,255,0)'; c.strokeStyle = 'rgb(0,255,0)';
+  c.lineWidth = Math.max(8, Math.round(fs * 0.1)); c.lineJoin = 'round';
+  words.forEach((w, i) => { c.strokeText(w, xs[i] - 10000, base); c.fillText(w, xs[i] - 10000, base); }); c.restore();
   // B: two thin staff lines framing the words, fading out at the ends
   const gx0 = x0 - 120, gx1 = x0 + tw + 120, g = c.createLinearGradient(gx0, 0, gx1, 0);
   g.addColorStop(0, 'rgba(0,0,255,0)'); g.addColorStop(0.12, 'rgba(0,0,255,1)'); g.addColorStop(0.88, 'rgba(0,0,255,1)'); g.addColorStop(1, 'rgba(0,0,255,0)');
